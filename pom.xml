@@ -83,7 +83,7 @@
 					<instructions>
 
 						<Export-Package>
-							org.liveSense.service.mail.*;version=${pom.version}
+							org.liveSense.service.email.*;version=${pom.version}
 						</Export-Package>
 
 						<Import-Package>
