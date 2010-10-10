@@ -17,11 +17,11 @@
 package org.liveSense.service.email;
 
 import java.util.ArrayList;
-import javax.jcr.RepositoryException;
+import javax.jcr.Session;
 
 
 
 public interface EmailService  {
-        public void sendEmail(String[] to, String[] cc, String bcc[], String from, String subject, String body, ArrayList<MimePart> parts) throws Exception;
+        public void sendEmail(Session session, String[] to, String[] cc, String bcc[], String from, String subject, ArrayList<MimePart> parts) throws Exception;
 	
 }

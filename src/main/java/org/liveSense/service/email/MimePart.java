@@ -26,4 +26,5 @@ public interface MimePart {
     public String getMimeType();
     public String getTemplate();
     public Object getData();
+	public String getText();
 }

@@ -73,5 +73,9 @@ public class NodeAttachmentMimePart implements MimePart {
     public void setName(String name) {
         this.name = name;
     }
+
+	public String getText() {
+		return null;
+	}
 }
  

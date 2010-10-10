@@ -59,6 +59,7 @@ import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
+import javax.mail.internet.MimeUtility;
 import org.apache.sling.commons.scheduler.Job;
 import org.apache.sling.commons.scheduler.Scheduler;
 import org.liveSense.utils.AdministrativeService;
@@ -202,7 +203,6 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
      * @scr.reference
      */
     private SlingRepository repository;
-    private Session session;
 
     /** Returns the JCR repository used by this service. */
     protected SlingRepository getRepository() {
@@ -224,7 +224,7 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
 
 
     public void startSendEmailSchedulerJob() {
-        log.info("Starting activationPurgeJob");
+        log.info("Starting emailSendJob");
 
         Map<String, Serializable> config = new HashMap<String, Serializable>();
         //set any configuration options in the config map here
@@ -253,7 +253,6 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
      */
     protected void activate(ComponentContext componentContext) throws RepositoryException {
         Dictionary<?, ?> props = componentContext.getProperties();
-        session = getAdministrativeSession(repository);
 
         String smtpHostNew = (String) componentContext.getProperties().get(PARAM_SMTP_HOST);
         if (smtpHostNew == null || smtpHostNew.length() == 0) {
@@ -341,7 +340,7 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
         sysprops.put("mail.smtp.timeout", Long.toString(smtpConnectionTimeout));
         sysprops.put("mail.smtp.ssl.enable", Boolean.toString(smtpSslEnable));
 
-        session = getAdministrativeSession(repository);
+        Session session = getAdministrativeSession(repository);
 
         if (spoolFolder.startsWith("/")) spoolFolder = spoolFolder.substring(1);
         if (spoolFolder.endsWith("/")) spoolFolder = spoolFolder.substring(0, spoolFolder.length()-1);
@@ -361,6 +360,7 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
         if (session.hasPendingChanges()) {
             session.save();
         }
+		session.logout();
 
 
         Long emailSendJobPeriodNew = (Long) componentContext.getProperties().get(PARAM_EMAIL_SEND_JOB_PERIOD);
@@ -394,7 +394,7 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
             }
 
             public Object getData() {
-                return "ajsa sajsd lajsd lajsd lakjsd lkajsd lkajsd ajsdlajs qwklqwr772ŽŽŽdŽsfŽsdflŽsdkf ???asdpwqowjka‡sfk";
+                return "ajsa sajsd lajsd lajsd lakjsd lkajsd lkajsd ajsdlajs qwklqwr772ï¿½ï¿½ï¿½dï¿½sfï¿½sdflï¿½sdkf ???asdpwqowjkaï¿½sfk";
             }
         });
 
@@ -410,9 +410,9 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
 
     @Override
     public void deactivate(ComponentContext componentContext) throws RepositoryException {
-        if (session.hasPendingChanges()) {
-            session.save();
-        }
+//        if (session.hasPendingChanges()) {
+//            session.save();
+//        }
         super.deactivate(componentContext);
     }
 
@@ -485,15 +485,19 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
                 Template tmpl = templateConfig.getTemplate(part.getTemplate());
                 StringWriter output = new StringWriter();
                 tmpl.process(part.getData(), output);
-            }
-
-            if (part.getData() instanceof InputStream) {
-                bp.setDataHandler(new DataHandler(new InputStreamDataSource(part.getName(), part.getMimeType(), (InputStream) part.getData())));
-            } else if (part.getData() instanceof DataHandler) {
-                bp.setDataHandler((DataHandler) part.getData());
-            } else if (part.getData() instanceof String) {
-                bp.setDataHandler(new DataHandler(new InputStreamDataSource(part.getName(), part.getMimeType(), new ByteArrayInputStream(((String) part.getData()).getBytes(configurator.getEncoding())))));
-            }
+				bp.setContent(output.toString(), part.getMimeType());
+            } else
+			if (part.getText() != null) {
+				bp.setText(part.getText());
+			} else {
+				if (part.getData() instanceof InputStream) {
+					bp.setDataHandler(new DataHandler(new InputStreamDataSource(part.getName(), part.getMimeType(), (InputStream) part.getData())));
+				} else if (part.getData() instanceof DataHandler) {
+					bp.setDataHandler((DataHandler) part.getData());
+				} else if (part.getData() instanceof String) {
+					bp.setDataHandler(new DataHandler(new InputStreamDataSource(part.getName(), part.getMimeType(), new ByteArrayInputStream(((String) part.getData()).getBytes(configurator.getEncoding())))));
+				}
+			}
             mp.addBodyPart(bp);
         }
 
@@ -501,7 +505,7 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
     }
 
     
-    public void sendEmail(String[] to, String[] cc, String[] bcc, String from, String subject, String body, ArrayList<MimePart> message) throws Exception {
+    public void sendEmail(Session session, String[] to, String[] cc, String[] bcc, String from, String subject, ArrayList<MimePart> message) throws Exception {
         try {
             /*
             javax.mail.Session mailsession = null;
@@ -534,9 +538,6 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
             Transport.send(msg);
              *
              */
-            if (!session.isLive()) {
-                session = getAdministrativeSession(repository);
-            }
             javax.mail.Session mailSession = null;
             Message msg = new MimeMessage(mailSession);
             msg.setFrom(new InternetAddress(from));
@@ -549,10 +550,12 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
             if (bcc!=null) for (int i = 0; i < bcc.length; i++) {
                 msg.setRecipients(Message.RecipientType.BCC, InternetAddress.parse(bcc[i], false));
             }
-            msg.setSubject(from);
-            if (body != null) {
+
+            msg.setSubject(MimeUtility.encodeText(subject, configurator.getEncoding(), "Q"));
+            /*
+			if (body != null) {
                 msg.setText(body);
-            }
+            }*/
             msg.setContent(createMultipart(message));
             msg.setHeader("X-Mailer", "liveSense bouncer");
             msg.setSentDate(new Date());
@@ -585,10 +588,10 @@ public class EmailServiceImpl extends AdministrativeService implements EmailServ
             mailNode.setProperty("jcr:data", in);
             mailNode.setProperty("jcr:lastModified", Calendar.getInstance());
             mailNode.setProperty("jcr:mimeType","plain/text");
-
         } catch (TemplateException ex) {
             log.error("Template error ",ex);
-        }
+        } finally {
+		}
     }
 
 }
