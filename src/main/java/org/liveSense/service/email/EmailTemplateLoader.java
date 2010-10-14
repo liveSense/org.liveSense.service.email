@@ -27,7 +27,7 @@ import javax.jcr.RepositoryException;
 import javax.jcr.Session;
 import javax.jcr.ValueFormatException;
 import org.apache.sling.jcr.api.SlingRepository;
-import org.liveSense.utils.AdministrativeService;
+import org.liveSense.core.AdministrativeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

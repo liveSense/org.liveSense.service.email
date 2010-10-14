@@ -62,8 +62,8 @@ import javax.mail.internet.MimeMultipart;
 import javax.mail.internet.MimeUtility;
 import org.apache.sling.commons.scheduler.Job;
 import org.apache.sling.commons.scheduler.Scheduler;
-import org.liveSense.utils.AdministrativeService;
-import org.liveSense.utils.Configurator;
+import org.liveSense.core.AdministrativeService;
+import org.liveSense.core.Configurator;
 
 /*
  * mail.smtp.user	String	Default user name for SMTP.
