@@ -1,4 +1,4 @@
-package com.esayfasi.mail.exceptions;
+package org.liveSense.service.email.exceptions;
 
 public class UserManagerServiceNotAvailableException extends Exception {
 
