@@ -23,7 +23,7 @@
 	<groupId>org.liveSense</groupId>
 	<artifactId>org.liveSense.service.email</artifactId>
 	<packaging>bundle</packaging>
-	<version>1.0.0-SNAPSHOT</version>
+	<version>1.0.0</version>
 	<name>liveSense Email service</name>
 	<description>liveSense Email service. It's storing the mails in /var/spool and a Job sends it periodically</description>
 	<repositories>
