@@ -73,6 +73,24 @@
 							freemarker
 						</Embed-Dependency>
 
+						<!-- Copy the files from filesystem to Bundle -->
+						<Include-Resource>
+							SLING-INF/content=src/main/content,
+							SLING-INF/nodetypes=src/main/nodetypes,
+							apps=src/main/scripts/apps,
+							{maven-resources}
+						</Include-Resource>
+
+						<!-- initial content to be loaded on bundle installation -->
+						<Sling-Initial-Content>
+							SLING-INF/content;overwrite:=true;uninstall:=true
+						</Sling-Initial-Content>
+
+						<!-- node types to be created -->
+						<Sling-Nodetypes>
+							SLING-INF/nodetypes/liveSense-email.cnd;reregister:=true
+						</Sling-Nodetypes>
+
 					</instructions>
 				</configuration>
 			</plugin>
@@ -119,7 +137,10 @@
 			<version>1.1.1</version>
 			<type>jar</type>
 		</dependency>
-
+        <dependency>
+        	<groupId>org.apache.felix</groupId>
+        	<artifactId>org.apache.felix.scr.annotations</artifactId>
+        </dependency>
 
 		<dependency>
 			<groupId>org.osgi</groupId>
@@ -131,5 +152,21 @@
 			<version>2.3.16</version>
 			<type>jar</type>
 		</dependency>
-	</dependencies>
+		<dependency>
+            <groupId>org.apache.sling</groupId>
+            <artifactId>org.apache.sling.jcr.api</artifactId>
+        </dependency>
+		<dependency>
+        	<groupId>org.apache.sling</groupId>
+        	<artifactId>org.apache.sling.event</artifactId>
+        </dependency>
+        <dependency>
+        	<groupId>org.apache.sling</groupId>
+        	<artifactId>org.apache.sling.jcr.resource</artifactId>
+        </dependency>
+        <dependency>
+        	<groupId>org.apache.sling</groupId>
+        	<artifactId>org.apache.sling.api</artifactId>
+        </dependency>
+ 	</dependencies>
 </project>

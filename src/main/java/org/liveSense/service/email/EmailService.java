@@ -22,6 +22,6 @@ import javax.jcr.Session;
 
 
 public interface EmailService  {
-        public void sendEmail(Session session, String[] to, String[] cc, String bcc[], String from, String subject, ArrayList<MimePart> parts) throws Exception;
-	
+        public void sendEmail(Session session, String resourceUrl) throws Exception;
+        public void sendEmail(String resourceUrl) throws Exception;
 }
