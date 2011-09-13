@@ -35,13 +35,13 @@ import javax.jcr.observation.ObservationManager;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.ConfigurationPolicy;
+import org.apache.felix.scr.annotations.Properties;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.commons.osgi.OsgiUtil;
 import org.apache.sling.event.jobs.JobUtil;
 import org.apache.sling.jcr.api.SlingRepository;
-import org.liveSense.core.AdministrativeService;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.event.EventAdmin;
 import org.slf4j.Logger;
@@ -58,8 +58,22 @@ import org.slf4j.LoggerFactory;
         metatype=true,
         configurationFactory=true,
         policy=ConfigurationPolicy.OPTIONAL)
+@Properties(value={
+	    @Property(name=EmailResourceChangeListener.PARAM_EMAIL_SPOOL_PATH, 
+	    		label="%contentPathes.name", 
+	    		description="%contentPathes.description", 
+	    		value={EmailResourceChangeListener.DEFAULT_EMAIL_SPOOL_PATH}),
+	    @Property(name = EmailResourceChangeListener.PARAM_NODE_TYPE, 
+	    		label = "%nodeType.label", 
+	    		description = "%nodeType.description", 
+	    		value = {EmailResourceChangeListener.NODE_TYPE_EMAIL }),
+	    @Property(name = EmailResourceChangeListener.PARAM_PROPERTY_NAME, 
+	    		label = "%propertyName.label", 
+	    		description = "%propertyName.description", 
+	    		value =	EmailResourceChangeListener.DEFAULT_PROPERTY_NAME )
+})
 
-public class EmailResourceChangeListener extends AdministrativeService {
+public class EmailResourceChangeListener {
     private static final Logger log = LoggerFactory.getLogger(EmailResourceChangeListener.class);
 			
     public static final String PARAM_EMAIL_SPOOL_PATH = EmailSendJobEventHandler.PARAM_SPOOL_FOLDER;
@@ -83,25 +97,16 @@ public class EmailResourceChangeListener extends AdministrativeService {
     private EventAdmin eventAdmin;
     @Reference
     ResourceResolverFactory resourceResolverFactory;
+
+    private ArrayList<PathEventListener> eventListeners = new ArrayList<PathEventListener>();
     
-    @Property(name=PARAM_EMAIL_SPOOL_PATH, 
-    		label="%contentPathes.name", 
-    		description="%contentPathes.description", 
-    		value={DEFAULT_EMAIL_SPOOL_PATH})
+    private ObservationManager observationManager;
+    private Session session;
+    
     private String contentPathes = DEFAULT_EMAIL_SPOOL_PATH;
-  
-    
-    @Property(name = PARAM_NODE_TYPE, label = "%nodeType.label", description = "%nodeType.description", value = {
-			NODE_TYPE_EMAIL })
     private String nodeType = DEFAULT_NODE_TYPE;
-	
-    @Property(name = PARAM_PROPERTY_NAME, label = "%propertyName.label", description = "%propertyName.description", value = 
-		DEFAULT_PROPERTY_NAME )
     private String propertyName = DEFAULT_PROPERTY_NAME;
     
-    
-    Session session;
-
     class PathEventListener implements EventListener {
 
     	private void generateJobEvent(String eventType, String filePath, String fileName) {
@@ -179,9 +184,6 @@ public class EmailResourceChangeListener extends AdministrativeService {
         }
     }
     
-    private ArrayList<PathEventListener> eventListeners = new ArrayList<PathEventListener>();
-    
-    private ObservationManager observationManager;
 
     /**
      * Activates this component.
@@ -192,7 +194,7 @@ public class EmailResourceChangeListener extends AdministrativeService {
     @Activate
     protected void activate(ComponentContext componentContext) throws RepositoryException {
          // Setting up content path
-	contentPathes = OsgiUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
+    	contentPathes = OsgiUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
 	
         // Setting up supported node type
         nodeType = OsgiUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
@@ -200,26 +202,35 @@ public class EmailResourceChangeListener extends AdministrativeService {
         // Setting up supported property name
         propertyName = OsgiUtil.toString(componentContext.getProperties().get(PARAM_PROPERTY_NAME), DEFAULT_PROPERTY_NAME);
 
-        session = getAdministrativeSession(repository);
-        if (repository.getDescriptor(Repository.OPTION_OBSERVATION_SUPPORTED).equals("true")) {
-            observationManager = session.getWorkspace().getObservationManager();
-            PathEventListener listener = new PathEventListener();
-            observationManager.addEventListener(listener, Event.PROPERTY_ADDED | Event.PROPERTY_CHANGED | Event.PROPERTY_REMOVED, contentPathes, true, null, new String[]{DEFAULT_PROPERTY_NAME}, true);
-            eventListeners.add(listener);
-
-            listener = new PathEventListener();
-            observationManager.addEventListener(listener, Event.NODE_REMOVED, contentPathes, true, null, new String[]{nodeType}, true);
-            eventListeners.add(listener);
-        }
+        try {
+        	session = repository.loginAdministrative(null);
+	        if (repository.getDescriptor(Repository.OPTION_OBSERVATION_SUPPORTED).equals("true")) {
+	            observationManager = session.getWorkspace().getObservationManager();
+	            PathEventListener listener = new PathEventListener();
+	            observationManager.addEventListener(listener, Event.PROPERTY_ADDED | Event.PROPERTY_CHANGED | Event.PROPERTY_REMOVED, contentPathes, true, null, new String[]{DEFAULT_PROPERTY_NAME}, true);
+	            eventListeners.add(listener);
+	
+	            listener = new PathEventListener();
+	            observationManager.addEventListener(listener, Event.NODE_REMOVED, contentPathes, true, null, new String[]{nodeType}, true);
+	            eventListeners.add(listener);
+	        }
+        } catch (RepositoryException e) {
+        	log.error("Activate failed", e);
+        	throw e;
+		} finally {
+		}
     }
   
-    @Override
     public void deactivate(ComponentContext componentContext) throws RepositoryException {
-        super.deactivate(componentContext);
         if (observationManager != null) {
             for (PathEventListener listener : eventListeners) {
                 observationManager.removeEventListener(listener);
             }
+        }
+        
+        if (session != null) {
+        	session.logout();
+        	session = null;
         }
     }    
 }
