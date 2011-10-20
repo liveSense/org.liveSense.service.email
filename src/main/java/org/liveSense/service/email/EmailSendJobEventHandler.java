@@ -163,6 +163,19 @@ public class EmailSendJobEventHandler
 		smtpPassword = OsgiUtil.toString(componentContext.getProperties().get(PARAM_SMTP_PASSWORD), DEFAULT_SMTP_PASSWORD);
 		spoolFolder = OsgiUtil.toString(componentContext.getProperties().get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
 
+    	Session admin = repository.loginAdministrative(null);
+    	String spoolFolders[] = spoolFolder.split("/");
+    	Node n = admin.getRootNode();
+    	for (int i = 0; i < spoolFolders.length; i++) {
+			if (!n.hasNode(spoolFolders[i])) {
+				n = n.addNode(spoolFolders[i]);
+			} else {
+				n = n.getNode(spoolFolders[i]);
+			}
+		}
+    	admin.save();
+    	admin.logout();
+
         /*
         Properties sysprops = System.getProperties();
         sysprops.put("mail.smtp.host", smtpHost);

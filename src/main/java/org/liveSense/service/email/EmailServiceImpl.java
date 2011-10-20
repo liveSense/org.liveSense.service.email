@@ -16,8 +16,14 @@
  */
 package org.liveSense.service.email;
 
+import java.io.BufferedReader;
+import java.io.CharArrayWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.util.Calendar;
 import java.util.Dictionary;
 import java.util.HashMap;
@@ -28,7 +34,10 @@ import javax.jcr.Binary;
 import javax.jcr.Node;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
+import javax.jcr.Value;
+import javax.jcr.query.qom.Length;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -36,18 +45,24 @@ import org.apache.felix.scr.annotations.Properties;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.Service;
+import org.apache.jackrabbit.value.BinaryValue;
 import org.apache.sling.api.resource.LoginException;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.resource.ResourceResolverFactory;
+import org.apache.sling.api.scripting.SlingBindings;
 import org.apache.sling.commons.osgi.OsgiUtil;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.JcrResourceConstants;
 import org.liveSense.core.AdministrativeService;
 import org.liveSense.core.Configurator;
+import org.liveSense.template.freemarker.wrapper.NodeModel;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import freemarker.template.Configuration;
+import freemarker.template.Template;
 
 @Component(label = "%email.service.name", 
 			description = "%email.service.description", 
@@ -101,6 +116,8 @@ public class EmailServiceImpl implements EmailService {
     	return repository;
     }
 
+    private Configuration templateConfig;
+    
     /**
      * Activates this component.
      * 
@@ -114,17 +131,43 @@ public class EmailServiceImpl implements EmailService {
     	nodeType = OsgiUtil.toString(props.get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
     	propertyName = OsgiUtil.toString(props.get(DEFAULT_PROPERTY_NAME), DEFAULT_PROPERTY_NAME);
     	spoolFolder = OsgiUtil.toString(props.get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
+    	
+    	if (spoolFolder.startsWith("/")) spoolFolder = spoolFolder.substring(1);
+    	if (spoolFolder.endsWith("/")) spoolFolder = spoolFolder.substring(0, spoolFolder.length()-2);
+    	
+    	Session admin = repository.loginAdministrative(null);
+    	String spoolFolders[] = spoolFolder.split("/");
+    	Node n = admin.getRootNode();
+    	for (int i = 0; i < spoolFolders.length; i++) {
+			if (!n.hasNode(spoolFolders[i])) {
+				n = n.addNode(spoolFolders[i]);
+			} else {
+				n = n.getNode(spoolFolders[i]);
+			}
+		}
+    	admin.save();
+    	admin.logout();
+    	
+    	templateConfig = new Configuration();
     }
 
     @Deactivate
     public void deactivate(ComponentContext componentContext) throws RepositoryException {
     }
 
-    public void sendEmail(String resourceUrl) throws Exception {
+    public void sendEmail(String resourceUrl, String templateUrl) throws Exception {
+    	sendEmail(null, resourceUrl, (HashMap)null);
+    }
+    
+    public void sendEmail(Session session, String resourceUrl, String templateUrl) throws Exception {
+    	sendEmail(null, resourceUrl, null, null);
+    }
+    
+    public void sendEmail(String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception {
     	sendEmail(null, resourceUrl);
     }
     
-    public void sendEmail(Session session, String resourceUrl) throws Exception {
+    public void sendEmail(Session session, String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception {
 		ResourceResolver resourceResolver = null;
 		boolean haveSession = false;
 
@@ -138,7 +181,7 @@ public class EmailServiceImpl implements EmailService {
 		    // Store mail to Spool folder
 		    Node mailNode = session.getRootNode().getNode(spoolFolder)
 			    .addNode(UUID.randomUUID().toString(), nodeType);
-		    mailNode.setProperty("resourceUrl", resourceUrl);
+		    //mailNode.setProperty("resourceUrl", resourceUrl);
 		    mailNode = mailNode.addNode(propertyName, "nt:resource");
 	
 			Map<String, Object> authInfo = new HashMap<String, Object>();
@@ -150,38 +193,23 @@ public class EmailServiceImpl implements EmailService {
 				throw new RepositoryException();
 		    }
 
-		    final Resource res = resourceResolver.getResource(resourceUrl);
-	
-		    mailNode.setProperty("jcr:data", 
-		    		new Binary() {
-							InputStream is;
-					
-							public InputStream getStream() throws RepositoryException {
-							    is = res.adaptTo(InputStream.class);
-							    return is;
-							}
-					
-							public int read(byte[] b, long position) throws IOException,
-								RepositoryException {
-							    return is.read(b, (int) position, 4096);
-							}
-					
-							public long getSize() throws RepositoryException {
-							    try {
-							    	return is.available();
-							    } catch (IOException e) {
-							    	throw new RepositoryException(e);
-							    }
-							}
-					
-							public void dispose() {
-							    try {
-							    	is.close();
-							    } catch (Exception e) {
-							    	log.error("Dispose error!");
-							    }
-							}
-					    });
+
+		    final Resource tmplt = resourceResolver.resolve(templateUrl);
+		    final Resource res = resourceResolver.resolve(resourceUrl);
+		    Node templateNode = res.adaptTo(Node.class);
+		    InputStream is = tmplt.adaptTo(InputStream.class);
+		    
+		    HashMap<String, Object> bindings = variables;
+		    if (bindings == null) bindings = new HashMap<String, Object>();
+		    
+		    Template tmpl = new Template(templateUrl, new StringReader(IOUtils.toString(is, "UTF-8")), templateConfig);
+	        bindings.put("node", new NodeModel(templateNode));
+	        
+	        StringWriter tmplWriter = new StringWriter(32768);
+	        tmpl.process(bindings, tmplWriter);
+	        
+		    
+		    mailNode.setProperty("jcr:data", new BinaryValue(tmplWriter.toString().getBytes("utf-8")));
 		    mailNode.setProperty("jcr:lastModified", Calendar.getInstance());
 		    mailNode.setProperty("jcr:mimeType", "message/rfc822");
 

@@ -17,11 +17,16 @@
 package org.liveSense.service.email;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+
 import javax.jcr.Session;
 
 
 
 public interface EmailService  {
-        public void sendEmail(Session session, String resourceUrl) throws Exception;
-        public void sendEmail(String resourceUrl) throws Exception;
+        public void sendEmail(Session session, String resourceUrl, String templateUrl) throws Exception;
+        public void sendEmail(String resourceUrl, String templateUrl) throws Exception;
+        public void sendEmail(Session session, String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception;
+        public void sendEmail(String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception;
+
 }

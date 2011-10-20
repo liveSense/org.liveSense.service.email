@@ -69,7 +69,8 @@
 							activation,
 							mail,
 							mailapi,
-							freemarker
+							freemarker,
+							commons-io
 						</Embed-Dependency>
 
 						<!-- Copy the files from filesystem to Bundle -->
@@ -163,5 +164,18 @@
         	<groupId>org.apache.sling</groupId>
         	<artifactId>org.apache.sling.api</artifactId>
         </dependency>
+        <dependency>
+        	<groupId>javax.servlet</groupId>
+        	<artifactId>servlet-api</artifactId>
+        </dependency>
+        <dependency>
+   			<groupId>org.apache.jackrabbit</groupId>
+   			<artifactId>jackrabbit-jcr-commons</artifactId>
+ 		</dependency>
+ 		<dependency>
+ 			<groupId>commons-io</groupId>
+ 			<artifactId>commons-io</artifactId>
+ 			<version>2.1</version>
+ 		</dependency>
  	</dependencies>
 </project>
