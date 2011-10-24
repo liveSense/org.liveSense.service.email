@@ -133,7 +133,7 @@ public class EmailServiceImpl implements EmailService {
     	spoolFolder = OsgiUtil.toString(props.get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
     	
     	if (spoolFolder.startsWith("/")) spoolFolder = spoolFolder.substring(1);
-    	if (spoolFolder.endsWith("/")) spoolFolder = spoolFolder.substring(0, spoolFolder.length()-2);
+    	if (spoolFolder.endsWith("/")) spoolFolder = spoolFolder.substring(0, spoolFolder.length()-1);
     	
     	Session admin = repository.loginAdministrative(null);
     	String spoolFolders[] = spoolFolder.split("/");

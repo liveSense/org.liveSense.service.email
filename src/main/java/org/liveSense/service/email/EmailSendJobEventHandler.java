@@ -164,6 +164,8 @@ public class EmailSendJobEventHandler
 		spoolFolder = OsgiUtil.toString(componentContext.getProperties().get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
 
     	Session admin = repository.loginAdministrative(null);
+    	if (spoolFolder.startsWith("/")) spoolFolder = spoolFolder.substring(1);
+    	
     	String spoolFolders[] = spoolFolder.split("/");
     	Node n = admin.getRootNode();
     	for (int i = 0; i < spoolFolders.length; i++) {

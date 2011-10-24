@@ -88,7 +88,7 @@
 
 						<!-- node types to be created -->
 						<Sling-Nodetypes>
-							SLING-INF/nodetypes/liveSense-email.cnd;reregister:=true
+							SLING-INF/nodetypes/email.cnd;reregister:=true
 						</Sling-Nodetypes>
 
 					</instructions>

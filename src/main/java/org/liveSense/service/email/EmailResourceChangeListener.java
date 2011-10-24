@@ -81,7 +81,7 @@ public class EmailResourceChangeListener {
     public static final String DEFAULT_EMAIL_SPOOL_PATH = EMAIL_SPOOL_PATH;
 		
     public static final String PARAM_NODE_TYPE = "email.nodeType";
-    public static final String NODE_TYPE_EMAIL = "liveSense:email";	        
+    public static final String NODE_TYPE_EMAIL = "email:email";	        
     public static final String DEFAULT_NODE_TYPE = NODE_TYPE_EMAIL;
 
     public static final String PARAM_PROPERTY_NAME = "email.propertyName";
@@ -194,8 +194,12 @@ public class EmailResourceChangeListener {
     @Activate
     protected void activate(ComponentContext componentContext) throws RepositoryException {
          // Setting up content path
-    	contentPathes = OsgiUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
+    	contentPathes = OsgiUtil.toString(componentContext.getProperties().get(PARAM_EMAIL_SPOOL_PATH), DEFAULT_EMAIL_SPOOL_PATH);
 	
+    	// Cut leading and trailing /
+    	//if (contentPathes.startsWith("/")) contentPathes = contentPathes.substring(1);
+    	if (contentPathes.endsWith("/")) contentPathes = contentPathes.substring(0, contentPathes.length()-1);
+    	
         // Setting up supported node type
         nodeType = OsgiUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
 
@@ -205,9 +209,10 @@ public class EmailResourceChangeListener {
         try {
         	session = repository.loginAdministrative(null);
 	        if (repository.getDescriptor(Repository.OPTION_OBSERVATION_SUPPORTED).equals("true")) {
+	        	log.info("Adding mail spool listener: "+contentPathes);
 	            observationManager = session.getWorkspace().getObservationManager();
 	            PathEventListener listener = new PathEventListener();
-	            observationManager.addEventListener(listener, Event.PROPERTY_ADDED | Event.PROPERTY_CHANGED | Event.PROPERTY_REMOVED, contentPathes, true, null, new String[]{DEFAULT_PROPERTY_NAME}, true);
+	            observationManager.addEventListener(listener, Event.PROPERTY_ADDED | Event.PROPERTY_CHANGED | Event.PROPERTY_REMOVED, contentPathes, true, null, new String[]{"nt:resource"}, true);
 	            eventListeners.add(listener);
 	
 	            listener = new PathEventListener();

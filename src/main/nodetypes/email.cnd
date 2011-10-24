@@ -1,0 +1,6 @@
+<email = 'http://livesense.org/email/1.0'>
+<nt  = 'http://www.jcp.org/jcr/nt/1.0'>
+<sling = 'http://sling.apache.org/jcr/sling/1.0'>
+<jcr = 'http://www.jcp.org/jcr/1.0'>
+
+[email:email] > nt:file
