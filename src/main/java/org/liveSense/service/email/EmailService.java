@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 import javax.jcr.Session;
+import javax.mail.internet.MimeMessage;
 
 
 
@@ -28,5 +29,7 @@ public interface EmailService  {
         public void sendEmail(String resourceUrl, String templateUrl) throws Exception;
         public void sendEmail(Session session, String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception;
         public void sendEmail(String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception;
+        public void sendEmail(Session session, MimeMessage message) throws Exception;
+        public String extractTextFromHtml(String html) throws Exception;
 
 }

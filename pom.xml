@@ -58,7 +58,9 @@
 					<instructions>
 
 						<Export-Package>
-							org.liveSense.service.email.*;version=${project.version}
+							org.liveSense.service.email.*;version=${project.version},
+							org.liveSense.template.freemarker.wrapper.*;version=${project.version},
+							javax.mail.*
 						</Export-Package>
 
 						<Import-Package>
@@ -68,7 +70,8 @@
 						<Embed-Dependency>
 							activation,
 							mail,
-							mailapi
+							mailapi,
+							boilerpipe
 						</Embed-Dependency>
 
 						<!-- Copy the files from filesystem to Bundle -->
@@ -124,6 +127,11 @@
 			<artifactId>mailapi</artifactId>
 			<version>1.4.3</version>
 			<type>jar</type>
+		</dependency>
+		<dependency>
+			<groupId>de.l3s.boilerpipe</groupId>
+			<artifactId>boilerpipe</artifactId>
+			<version>1.1.0</version>
 		</dependency>
 		<!-- 
 		<dependency>

@@ -16,26 +16,23 @@
  */
 package org.liveSense.service.email;
 
-import java.io.BufferedReader;
-import java.io.CharArrayWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
-import java.io.Writer;
 import java.util.Calendar;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import javax.jcr.Binary;
 import javax.jcr.Node;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
-import javax.jcr.Value;
-import javax.jcr.query.qom.Length;
+import javax.mail.MessagingException;
+import javax.mail.internet.MimeMessage;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.felix.scr.annotations.Activate;
@@ -50,16 +47,16 @@ import org.apache.sling.api.resource.LoginException;
 import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.resource.ResourceResolverFactory;
-import org.apache.sling.api.scripting.SlingBindings;
-import org.apache.sling.commons.osgi.OsgiUtil;
+import org.apache.sling.commons.osgi.PropertiesUtil;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.JcrResourceConstants;
-import org.liveSense.core.AdministrativeService;
 import org.liveSense.core.Configurator;
 import org.liveSense.template.freemarker.wrapper.NodeModel;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import de.l3s.boilerpipe.extractors.ArticleExtractor;
 
 import freemarker.template.Configuration;
 import freemarker.template.Template;
@@ -128,9 +125,9 @@ public class EmailServiceImpl implements EmailService {
     protected void activate(ComponentContext componentContext)
 	    throws RepositoryException {
     	Dictionary<?, ?> props = componentContext.getProperties();
-    	nodeType = OsgiUtil.toString(props.get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
-    	propertyName = OsgiUtil.toString(props.get(DEFAULT_PROPERTY_NAME), DEFAULT_PROPERTY_NAME);
-    	spoolFolder = OsgiUtil.toString(props.get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
+    	nodeType = PropertiesUtil.toString(props.get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
+    	propertyName = PropertiesUtil.toString(props.get(DEFAULT_PROPERTY_NAME), DEFAULT_PROPERTY_NAME);
+    	spoolFolder = PropertiesUtil.toString(props.get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
     	
     	if (spoolFolder.startsWith("/")) spoolFolder = spoolFolder.substring(1);
     	if (spoolFolder.endsWith("/")) spoolFolder = spoolFolder.substring(0, spoolFolder.length()-1);
@@ -156,15 +153,15 @@ public class EmailServiceImpl implements EmailService {
     }
 
     public void sendEmail(String resourceUrl, String templateUrl) throws Exception {
-    	sendEmail(null, resourceUrl, (HashMap)null);
+    		sendEmail(null, resourceUrl, (HashMap)null);
     }
     
     public void sendEmail(Session session, String resourceUrl, String templateUrl) throws Exception {
-    	sendEmail(null, resourceUrl, null, null);
+    		sendEmail(null, resourceUrl, null, null);
     }
     
     public void sendEmail(String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception {
-    	sendEmail(null, resourceUrl);
+    		sendEmail(null, resourceUrl);
     }
     
     public void sendEmail(Session session, String resourceUrl, String templateUrl, HashMap<String, Object> variables) throws Exception {
@@ -202,14 +199,13 @@ public class EmailServiceImpl implements EmailService {
 		    HashMap<String, Object> bindings = variables;
 		    if (bindings == null) bindings = new HashMap<String, Object>();
 		    
-		    Template tmpl = new Template(templateUrl, new StringReader(IOUtils.toString(is, "UTF-8")), templateConfig);
+		    Template tmpl = new Template(templateUrl, new StringReader(IOUtils.toString(is, configurator.getEncoding())), templateConfig);
 	        bindings.put("node", new NodeModel(templateNode));
 	        
 	        StringWriter tmplWriter = new StringWriter(32768);
 	        tmpl.process(bindings, tmplWriter);
-	        
-		    
-		    mailNode.setProperty("jcr:data", new BinaryValue(tmplWriter.toString().getBytes("utf-8")));
+
+	        mailNode.setProperty("jcr:data", new BinaryValue(tmplWriter.toString().getBytes(configurator.getEncoding())));
 		    mailNode.setProperty("jcr:lastModified", Calendar.getInstance());
 		    mailNode.setProperty("jcr:mimeType", "message/rfc822");
 
@@ -222,5 +218,74 @@ public class EmailServiceImpl implements EmailService {
 		    	session.logout();
 		}
     }
+
+    public void sendEmail(Session session, final MimeMessage message) throws Exception {
+		ResourceResolver resourceResolver = null;
+		boolean haveSession = false;
+
+		try {
+			if (session != null && session.isLive()) {
+			    haveSession = true;
+			} else {
+			    session = repository.loginAdministrative(null);
+			}
+		
+		    // Store mail to Spool folder
+		    Node mailNode = session.getRootNode().getNode(spoolFolder)
+			    .addNode(UUID.randomUUID().toString(), nodeType);
+		    mailNode = mailNode.addNode(propertyName, "nt:resource");
+	
+			Map<String, Object> authInfo = new HashMap<String, Object>();
+		    authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
+		    try {
+				resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
+		    } catch (LoginException e) {
+				log.error("Authentication error");
+				throw new RepositoryException();
+		    }
+
+		    
+		    PipedInputStream in = new PipedInputStream();
+		    final PipedOutputStream out = new PipedOutputStream(in);
+		    new Thread(
+		      new Runnable(){
+		        public void run(){
+		        		try {
+							message.writeTo(out);
+							out.close();
+						} catch (IOException e) {
+							log.error("Could not write mail message stream", e);
+						} catch (MessagingException e) {
+							log.error("Could not write mail message stream", e);
+						}
+		        }
+		      }
+		    ).start();
+		    BinaryValue bv = null;
+		    try {
+		    		bv = new BinaryValue(in);
+		    } catch (IllegalArgumentException e) {
+		    	// The jackrabbit closes the PipedInputStream, thats incorrect
+			}
+		    if (bv != null) {
+		    		mailNode.setProperty("jcr:data", bv);
+		    }
+		    mailNode.setProperty("jcr:lastModified", Calendar.getInstance());
+		    mailNode.setProperty("jcr:mimeType", "message/rfc822");
+
+		} catch (Exception ex) {
+		    log.error("Cannot create mail: ", ex);
+		    throw ex;
+		} finally {
+		    if (resourceResolver != null)
+		    	resourceResolver.close();
+		    if (!haveSession && session != null)
+		    	session.logout();
+		}
+    }
+
+	public String extractTextFromHtml(String html) throws Exception {
+		return ArticleExtractor.getInstance().getText(html);
+	}
 
 }
