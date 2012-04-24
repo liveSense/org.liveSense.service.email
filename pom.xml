@@ -60,18 +60,31 @@
 						<Export-Package>
 							org.liveSense.service.email.*;version=${project.version},
 							org.liveSense.template.freemarker.wrapper.*;version=${project.version},
-							javax.mail.*
 						</Export-Package>
+			            <_exportcontents>
+							javax.mail.*,
+							javax.activation.*,
+							com.sun.mail.*,
+							org.apache.html.*,
+							org.apache.vml.*,
+							org.apache.xerces.*,
+							org.apache.xml.*,
+							org.w3c.dom.html.*,
+							org.cyberneko.html.*,
+							de.l3s.boilerpipe.*
+			            </_exportcontents>
 
 						<Import-Package>
 							*;resolution:=optional
 						</Import-Package>
 
 						<Embed-Dependency>
-							activation,
 							mail,
 							mailapi,
-							boilerpipe
+							activation,
+							boilerpipe,
+							xercesImpl,
+							nekohtml
 						</Embed-Dependency>
 
 						<!-- Copy the files from filesystem to Bundle -->
@@ -129,6 +142,11 @@
 			<type>jar</type>
 		</dependency>
 		<dependency>
+			<groupId>javax.activation</groupId>
+			<artifactId>activation</artifactId>
+			<version>1.1.1</version>
+		</dependency>
+		<dependency>
 			<groupId>de.l3s.boilerpipe</groupId>
 			<artifactId>boilerpipe</artifactId>
 			<version>1.1.0</version>
@@ -178,5 +196,15 @@
  			<groupId>commons-io</groupId>
  			<artifactId>commons-io</artifactId>
  		</dependency>
+ 		<dependency>
+			<groupId>xerces</groupId>
+			<artifactId>xercesImpl</artifactId>
+			<version>2.10.0</version>
+		</dependency>
+		<dependency>
+			<groupId>net.sourceforge.nekohtml</groupId>
+			<artifactId>nekohtml</artifactId>
+			<version>1.9.15</version>
+		</dependency>
  	</dependencies>
 </project>

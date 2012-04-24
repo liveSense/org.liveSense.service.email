@@ -41,7 +41,7 @@ import org.apache.sling.api.resource.Resource;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.api.resource.ResourceUtil;
-import org.apache.sling.commons.osgi.OsgiUtil;
+import org.apache.sling.commons.osgi.PropertiesUtil;
 import org.apache.sling.event.EventUtil;
 import org.apache.sling.event.jobs.JobProcessor;
 import org.apache.sling.event.jobs.JobUtil;
@@ -155,13 +155,13 @@ public class EmailSendJobEventHandler
 	protected void activate(ComponentContext componentContext)
 			throws RepositoryException {
 
-		smtpHost = OsgiUtil.toString(componentContext.getProperties().get(PARAM_SMTP_HOST), DEFAULT_SMTP_HOST);
-		smtpPort = OsgiUtil.toLong(componentContext.getProperties().get(PARAM_SMTP_PORT), DEFAULT_SMTP_PORT);
-		smtpConnectionTimeout = OsgiUtil.toLong(componentContext.getProperties().get(PARAM_SMTP_CONNECTION_TIMEOUT), DEFAULT_SMTP_CONNECTION_TIMEOUT);
-		smtpSslEnable = OsgiUtil.toBoolean(componentContext.getProperties().get(PARAM_SMTP_SSL_ENABLE), DEFAULT_SMTP_SSL_ENABLE);
-		smtpUserName = OsgiUtil.toString(componentContext.getProperties().get(DEFAULT_SMTP_USER_NAME), DEFAULT_SMTP_USER_NAME);
-		smtpPassword = OsgiUtil.toString(componentContext.getProperties().get(PARAM_SMTP_PASSWORD), DEFAULT_SMTP_PASSWORD);
-		spoolFolder = OsgiUtil.toString(componentContext.getProperties().get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
+		smtpHost = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SMTP_HOST), DEFAULT_SMTP_HOST);
+		smtpPort = PropertiesUtil.toLong(componentContext.getProperties().get(PARAM_SMTP_PORT), DEFAULT_SMTP_PORT);
+		smtpConnectionTimeout = PropertiesUtil.toLong(componentContext.getProperties().get(PARAM_SMTP_CONNECTION_TIMEOUT), DEFAULT_SMTP_CONNECTION_TIMEOUT);
+		smtpSslEnable = PropertiesUtil.toBoolean(componentContext.getProperties().get(PARAM_SMTP_SSL_ENABLE), DEFAULT_SMTP_SSL_ENABLE);
+		smtpUserName = PropertiesUtil.toString(componentContext.getProperties().get(DEFAULT_SMTP_USER_NAME), DEFAULT_SMTP_USER_NAME);
+		smtpPassword = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SMTP_PASSWORD), DEFAULT_SMTP_PASSWORD);
+		spoolFolder = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
 
     	Session admin = repository.loginAdministrative(null);
     	if (spoolFolder.startsWith("/")) spoolFolder = spoolFolder.substring(1);
@@ -216,8 +216,6 @@ public class EmailSendJobEventHandler
 				return false;
 			}
 
-			Resource res = resourceResolver.getResource(resourcePath);
-			if (ResourceUtil.isA(res, nodeType)) {
 				if (event
 						.getTopic()
 						.equals(EmailResourceChangeListener.EMAIL_REMOVE_TOPIC)) {
@@ -227,18 +225,20 @@ public class EmailSendJobEventHandler
 						.getTopic()
 						.equals(EmailResourceChangeListener.EMAIL_SEND_TOPIC)) {
 					// insert
-					return sendMail(session, resourcePath);
+					Resource res = resourceResolver.getResource(resourcePath);
+					if (ResourceUtil.isA(res, nodeType)) {
+						return sendMail(session, resourcePath);
+					} else {
+					    log.error("NodeTypeConflict - expected: "+nodeType+" actual: "+res.getResourceType());
+					    return false;
+					}
 				}
-			} else {
-			    log.error("NodeTypeConflict - expected: "+nodeType+" actual: "+res.getResourceType());
-			    return false;
-			}
 			return true;
 		} catch (RepositoryException e) {
-			log.error("RepositoryException: " + e);
+			log.error("process - "+ e, e);
 			return false;
 		} catch (Exception e) {
-			log.error("Exception: " + e);
+			log.error("process - " + e, e);
 			return false;
 		} finally {
 		    if (resourceResolver != null) resourceResolver.close();
@@ -250,12 +250,13 @@ public class EmailSendJobEventHandler
 	}
 
     public boolean sendMail(Session session, String path) throws RepositoryException, Exception {
-		try {
+	    ResourceResolver resourceResolver = null;
+
+    		try {
 		    log.info("Sending email: " + path);
 	
 		    Map<String, Object> authInfo = new HashMap<String, Object>();
 		    authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-		    ResourceResolver resourceResolver = null;
 		    try {
 				resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
 		    } catch (LoginException e) {
@@ -272,49 +273,52 @@ public class EmailSendJobEventHandler
 				    log.info("Sending email: " + node.getName());
 				    MimeMessage msg = new MimeMessage(getMailSession(), 
 				    	node.getNode("jcr:content").getProperty("jcr:data").getBinary().getStream());
-				    
-				    log.info("  --> Transporting to: "+ msg.getAllRecipients()[0].toString());
-				    Transport.send(msg);
-				    try {
-						node.remove();
-				    } catch (RepositoryException ex) {
-						log.error("Could not remove mail from spool folder: " + node.getName());
-						log.debug("Exception: ", ex);
-						return false;
+				    if (msg.getAllRecipients() != null) {
+					    log.info("  --> Transporting to: "+ msg.getAllRecipients()[0].toString());
+					    Transport.send(msg);
+					    try {
+							node.remove();
+					    } catch (RepositoryException ex) {
+							log.error("Could not remove mail from spool folder: " + node.getName(), ex);
+							return false;
+					    }
+				    } else {
+					    log.warn("  --> No recepients, removing "+ node.getName());
+					    try {
+							node.remove();
+					    } catch (RepositoryException ex) {
+							log.error("Could not remove mail from spool folder: " + node.getName(), ex);
+							return false;
+					    }
+				    	
 				    }
 				} catch (MessagingException ex) {
-				    log.error("Message could not be send: " + node.getName());
-				    log.debug("Exception: ", ex);
+				    log.error("Message could not be send: " + node.getName(), ex);
 				    return false;
 				} catch (PathNotFoundException ex) {
 				    log.error("Path not found - maybe not a nt:file node?: "
-					    + node.getName());
-				    log.debug("Exception: ", ex);
+					    + node.getName(), ex);
 				    return false;
 				} catch (RepositoryException ex) {
-				    log.error("Repository error: " + node.getName());
-				    log.debug("Exception: ", ex);
+				    log.error("Repository error: " + node.getName(), ex);
 				    return false;
-				}
-		
-				if (session.hasPendingChanges()) {
-				    session.save();
 				}
 				return true;
 		    }
 		    return false;
 		} finally {
+		    if (resourceResolver != null) resourceResolver.close();
 		}
     }
 
 	public boolean deleteMail(Session session, String path)
 			throws RepositoryException, Exception {
-	    try {
+	    ResourceResolver resourceResolver = null;
+		try {
 			log.info("Removing email: " + path);
 
 			Map<String, Object> authInfo = new HashMap<String, Object>();
 		    authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-		    ResourceResolver resourceResolver = null;
 		    try {
 				resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
 		    } catch (LoginException e) {
@@ -323,21 +327,21 @@ public class EmailSendJobEventHandler
 		    }
 	
 		    Resource res = resourceResolver.getResource(path);
-		    Node node = res.adaptTo(Node.class);
-	
+		    Node node = null;
+		    	if (res != null) {
+		    		node = res.adaptTo(Node.class);
+		    	}
 		    if (node != null) {
 				// Removing node
-		    	node.remove();
+		    		node.remove();
 		    }
-			if (session.hasPendingChanges()) {
-			    session.save();
-			}
 			return true;
 
 	    } catch (RepositoryException e) {
-	    	log.error("Email remove", e);
-	    	throw e;
+	    		log.error("Email remove", e);
+	    		throw e;
 		} finally {
+		    if (resourceResolver != null) resourceResolver.close();
 		}
 	}
 
