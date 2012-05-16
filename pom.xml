@@ -63,15 +63,7 @@
 						</Export-Package>
 			            <_exportcontents>
 							javax.mail.*,
-							javax.activation.*,
-							com.sun.mail.*,
-							org.apache.html.*,
-							org.apache.vml.*,
-							org.apache.xerces.*,
-							org.apache.xml.*,
-							org.w3c.dom.html.*,
-							org.cyberneko.html.*,
-							de.l3s.boilerpipe.*
+							javax.activation.*
 			            </_exportcontents>
 
 						<Import-Package>
@@ -208,3 +200,4 @@
 		</dependency>
  	</dependencies>
 </project>
+
