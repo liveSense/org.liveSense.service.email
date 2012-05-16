@@ -64,7 +64,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmail(String content,  String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmail(String content,  String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message.
@@ -79,7 +79,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmail(Session session, String content, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmail(Session session, String content, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 
 	/**
@@ -733,7 +733,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateString(String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -744,7 +744,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateString(String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 
 	/**
@@ -760,7 +760,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateString(String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message with a FreeMarker template as administrator user.  The resource node properties are accessible via template.
@@ -776,7 +776,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateString(String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -792,7 +792,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateString(String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -804,7 +804,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateString(Session session, String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -816,7 +816,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateString(Session session, String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template.
@@ -832,7 +832,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateString(Session session, String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template. The resource node properties are accessible via template.
@@ -849,7 +849,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateString(Session session, String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	
 	/**
@@ -867,7 +867,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateString(Session session, String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -878,7 +878,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateNode(String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 
 	/**
@@ -890,7 +890,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateNode(String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -901,7 +901,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Node template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateNode(Node template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -913,7 +913,7 @@ public interface EmailService {
 	 * @param variables - Additional template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Node template, String resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Node template, String resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 
 	/**
@@ -926,7 +926,7 @@ public interface EmailService {
 	 * @param variables - Additional template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Node template, Node resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Node template, Node resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user.
@@ -941,7 +941,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template  as administrator user. 
@@ -956,7 +956,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Node template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Node template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -972,7 +972,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -988,7 +988,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Node template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Node template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template.
@@ -1004,7 +1004,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template as administrator user. The resource node properties are accessible via template. 
@@ -1020,7 +1020,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Node template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Node template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 
 	/**
@@ -1033,7 +1033,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 
 	/**
@@ -1046,7 +1046,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template. The resource node properties are accessible via template.
@@ -1058,7 +1058,7 @@ public interface EmailService {
 	 * @param bcc - List of BCC. If it's null tries the resource node's "bcc" property
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template. The resource node properties are accessible via template.
@@ -1071,7 +1071,7 @@ public interface EmailService {
 	 * @param variables - Additional template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, String resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, Node template, String resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 
 	/**
@@ -1085,7 +1085,7 @@ public interface EmailService {
 	 * @param variables - Additional template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template.
@@ -1101,7 +1101,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template. 
@@ -1117,7 +1117,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, Node template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template. The resource node properties are accessible via template.
@@ -1134,7 +1134,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template. The resource node properties are accessible via template.
@@ -1151,7 +1151,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, Node template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template. The resource node properties are accessible via template.
@@ -1168,7 +1168,7 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 	/**
 	 * Send a mime message from a resource node with a FreeMarker template.  The resource node properties are accessible via template.
@@ -1185,6 +1185,6 @@ public interface EmailService {
 	 * @param variables - Template variables
 	 * @throws Exception
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception;
+	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception;
 
 }

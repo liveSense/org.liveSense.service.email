@@ -40,6 +40,7 @@ import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.commons.osgi.OsgiUtil;
+import org.apache.sling.commons.osgi.PropertiesUtil;
 import org.apache.sling.event.jobs.JobUtil;
 import org.apache.sling.jcr.api.SlingRepository;
 import org.osgi.service.component.ComponentContext;
@@ -194,17 +195,17 @@ public class EmailResourceChangeListener {
     @Activate
     protected void activate(ComponentContext componentContext) throws RepositoryException {
          // Setting up content path
-    	contentPathes = OsgiUtil.toString(componentContext.getProperties().get(PARAM_EMAIL_SPOOL_PATH), DEFAULT_EMAIL_SPOOL_PATH);
+    	contentPathes = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_EMAIL_SPOOL_PATH), DEFAULT_EMAIL_SPOOL_PATH);
 	
     	// Cut leading and trailing /
-    	//if (contentPathes.startsWith("/")) contentPathes = contentPathes.substring(1);
+    	if (!contentPathes.startsWith("/")) contentPathes = "/"+contentPathes;
     	if (contentPathes.endsWith("/")) contentPathes = contentPathes.substring(0, contentPathes.length()-1);
     	
         // Setting up supported node type
-        nodeType = OsgiUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
+        nodeType = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
 
         // Setting up supported property name
-        propertyName = OsgiUtil.toString(componentContext.getProperties().get(PARAM_PROPERTY_NAME), DEFAULT_PROPERTY_NAME);
+        propertyName = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_PROPERTY_NAME), DEFAULT_PROPERTY_NAME);
 
         try {
         	session = repository.loginAdministrative(null);

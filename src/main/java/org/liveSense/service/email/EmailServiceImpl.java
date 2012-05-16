@@ -22,6 +22,7 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Dictionary;
@@ -29,7 +30,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.activation.DataHandler;
+import javax.activation.DataSource;
+import javax.activation.FileDataSource;
 import javax.jcr.Node;
+import javax.jcr.NodeIterator;
 import javax.jcr.PathNotFoundException;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
@@ -40,9 +45,11 @@ import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.internet.AddressException;
 import javax.mail.internet.InternetAddress;
+import javax.mail.internet.InternetHeaders;
 import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
+import javax.mail.internet.MimeUtility;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
@@ -80,7 +87,8 @@ import freemarker.template.TemplateException;
  */
 @Component(label = "%email.service.name", description = "%email.service.description", immediate = true, metatype = true)
 @Service(value = EmailService.class)
-@Properties(value = { @Property(name = EmailServiceImpl.PARAM_NODE_TYPE, label = "%nodeType.label", description = "%nodeType.description", value = { EmailServiceImpl.DEFAULT_NODE_TYPE }),
+@Properties(value = { 
+		@Property(name = EmailServiceImpl.PARAM_NODE_TYPE, label = "%nodeType.label", description = "%nodeType.description", value = { EmailServiceImpl.DEFAULT_NODE_TYPE }),
 		@Property(name = EmailServiceImpl.PARAM_PROPERTY_NAME, label = "%propertyName.label", description = "%propertyName.description", value = EmailServiceImpl.DEFAULT_PROPERTY_NAME),
 		@Property(name = EmailServiceImpl.PARAM_SPOOL_FOLDER, label = "%spoolFolder.name", description = "%spoolFolder.description", value = EmailServiceImpl.DEFAULT_SPOOL_FOLDER) })
 public class EmailServiceImpl implements EmailService {
@@ -209,20 +217,27 @@ public class EmailServiceImpl implements EmailService {
 		}
 	}
 
-	//	private String templateNode(String name, Node resource, Node templateNode, HashMap<String, Object> bindings) throws ValueFormatException, PathNotFoundException, IOException, RepositoryException, TemplateException {
-	//		return templateNode(name, resource, getNodeContentAsString(resource), bindings);
-	//	}
+	private InternetAddress convertToInternetAddress(Object address) throws AddressException, UnsupportedEncodingException {
+		if (address instanceof InternetAddress)
+			return (InternetAddress)address;
+		else if (address instanceof String) {
+			return new InternetAddress(MimeUtility.encodeText((String)address, configurator.getEncoding(), "Q"));
+		}
+		return new InternetAddress(MimeUtility.encodeText(address.toString(), configurator.getEncoding(), "Q"));
 
-	private MimeMessage prepareMimeMessage(MimeMessage mimeMessage, Node node, String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws AddressException, MessagingException, ValueFormatException, PathNotFoundException,
-			RepositoryException {
+	}
+	
+	private MimeMessage prepareMimeMessage(MimeMessage mimeMessage, Node node, String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws AddressException, MessagingException, ValueFormatException, PathNotFoundException,
+			RepositoryException, UnsupportedEncodingException {
 
+		
 		if (replyTo != null) {
-			mimeMessage.setReplyTo(new InternetAddress[] { new InternetAddress(replyTo) });
+			mimeMessage.setReplyTo(new InternetAddress[] { convertToInternetAddress(replyTo) });
 		} else {
 			if (node != null && node.hasProperty("replyTo")) {
-				mimeMessage.setReplyTo(new InternetAddress[] { new InternetAddress(node.getProperty("replyTo").getString()) });
+				mimeMessage.setReplyTo(new InternetAddress[] { convertToInternetAddress(node.getProperty("replyTo").getString()) });
 			} else if (variables != null && variables.containsKey("replyTo")) {
-				mimeMessage.setReplyTo(new InternetAddress[] { new InternetAddress((String)variables.get("replyTo")) });
+				mimeMessage.setReplyTo(new InternetAddress[] { convertToInternetAddress((String)variables.get("replyTo")) });
 			}
 		}
 		if (date == null) {
@@ -238,50 +253,50 @@ public class EmailServiceImpl implements EmailService {
 		}
 
 		if (subject != null) {
-			mimeMessage.setSubject(subject);
+			mimeMessage.setSubject(MimeUtility.encodeText(subject, configurator.getEncoding(), "Q"));
 		} else {
 			if (node != null && node.hasProperty("subject")) {
-				mimeMessage.setSubject(node.getProperty("subject").getString());
+				mimeMessage.setSubject(MimeUtility.encodeText(node.getProperty("subject").getString(), configurator.getEncoding(), "Q"));
 			} else if (variables != null && variables.containsKey("subject")) {
-				mimeMessage.setSubject((String)variables.get("subject"));
+				mimeMessage.setSubject(MimeUtility.encodeText((String)variables.get("subject"), configurator.getEncoding(), "Q"));
 			}
 		}
 
 		if (from != null) {
-			mimeMessage.setFrom(new InternetAddress(from));
+			mimeMessage.setFrom(convertToInternetAddress(from));
 		} else {
 			if (node != null && node.hasProperty("from")) {
-				mimeMessage.setFrom(new InternetAddress(node.getProperty("from").getString()));
+				mimeMessage.setFrom(convertToInternetAddress(node.getProperty("from").getString()));
 			} else if (variables != null && variables.containsKey("from")) {
-				mimeMessage.setFrom(new InternetAddress((String)variables.get("from")));
+				mimeMessage.setFrom(convertToInternetAddress((String)variables.get("from")));
 			}
 		}
 
 		if (to != null) {
 			for (int i = 0; i < to.length; i++) {
-				mimeMessage.addRecipient(Message.RecipientType.TO, new InternetAddress(to[i]));
+				mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(to[i]));
 			}
 		} else {
 			if (node != null && node.hasProperty("to")) {
 				if (node.getProperty("to").isMultiple()) {
 					Value[] values = node.getProperty("to").getValues();
 					for (int i = 0; i < values.length; i++) {
-						mimeMessage.addRecipient(Message.RecipientType.TO, new InternetAddress(values[i].getString()));
+						mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(values[i].getString()));
 					}
 				} else {
-					mimeMessage.addRecipient(Message.RecipientType.TO, new InternetAddress(node.getProperty("to").getString()));
+					mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(node.getProperty("to").getString()));
 				}
-			}  else if (variables != null && variables.containsKey("to") && (variables.get("to") instanceof String[])) {
-				String[] values = (String[])variables.get("to");
+			}  else if (variables != null && variables.containsKey("to") && (variables.get("to") instanceof Object[])) {
+				Object[] values = (Object[])variables.get("to");
 				for (int i = 0; i < values.length; i++) {
-					mimeMessage.addRecipient(Message.RecipientType.TO, new InternetAddress(values[i]));
+					mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(values[i]));
 				}
 			}
 		}
 
 		if (cc != null) {
 			for (int i = 0; i < cc.length; i++) {
-				mimeMessage.addRecipient(Message.RecipientType.CC, new InternetAddress(cc[i]));
+				mimeMessage.addRecipient(Message.RecipientType.CC, convertToInternetAddress(cc[i]));
 			}
 		} else {
 			if (node != null && node.hasProperty("cc")) {
@@ -291,289 +306,39 @@ public class EmailServiceImpl implements EmailService {
 						mimeMessage.addRecipient(Message.RecipientType.CC, new InternetAddress(values[i].getString()));
 					}
 				} else {
-					mimeMessage.addRecipient(Message.RecipientType.CC, new InternetAddress(node.getProperty("cc").getString()));
+					mimeMessage.addRecipient(Message.RecipientType.CC, convertToInternetAddress(node.getProperty("cc").getString()));
 				}
-			}  else if (variables != null && variables.containsKey("cc") && (variables.get("cc") instanceof String[])) {
-				String[] values = (String[])variables.get("cc");
+			}  else if (variables != null && variables.containsKey("cc") && (variables.get("cc") instanceof Object[])) {
+				Object[] values = (Object[])variables.get("cc");
 				for (int i = 0; i < values.length; i++) {
-					mimeMessage.addRecipient(Message.RecipientType.CC, new InternetAddress(values[i]));
+					mimeMessage.addRecipient(Message.RecipientType.CC, convertToInternetAddress(values[i]));
 				}
 			}
 		}
 
 		if (bcc != null) {
 			for (int i = 0; i < bcc.length; i++) {
-				mimeMessage.addRecipient(Message.RecipientType.BCC, new InternetAddress(bcc[i]));
+				mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(bcc[i]));
 			}
 		} else {
 			if (node != null && node.hasProperty("bcc")) {
 				if (node.getProperty("bcc").isMultiple()) {
 					Value[] values = node.getProperty("bcc").getValues();
 					for (int i = 0; i < values.length; i++) {
-						mimeMessage.addRecipient(Message.RecipientType.BCC, new InternetAddress(values[i].getString()));
+						mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(values[i].getString()));
 					}
 				} else {
-					mimeMessage.addRecipient(Message.RecipientType.BCC, new InternetAddress(node.getProperty("bcc").getString()));
+					mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(node.getProperty("bcc").getString()));
 				}
-			}  else if (variables != null && variables.containsKey("bcc") && (variables.get("bcc") instanceof String[])) {
-				String[] values = (String[])variables.get("bcc");
+			}  else if (variables != null && variables.containsKey("bcc") && (variables.get("bcc") instanceof Object[])) {
+				Object[] values = (Object[])variables.get("bcc");
 				for (int i = 0; i < values.length; i++) {
-					mimeMessage.addRecipient(Message.RecipientType.BCC, new InternetAddress(values[i]));
+					mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(values[i]));
 				}
 			}
 		}
 		return mimeMessage;
 	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	/*
-		public void sendEmailFromRFC822TemplateString(Session session, Node resource, String template, HashMap<String, Object> variables) throws Exception {
-			ResourceResolver resourceResolver = null;
-			boolean haveSession = false;
-
-			try {
-				if (session != null && session.isLive()) {
-					haveSession = true;
-				} else {
-					session = repository.loginAdministrative(null);
-				}
-
-				// Store mail to Spool folder
-				Node mailNode = session.getRootNode().getNode(spoolFolder).addNode(UUID.randomUUID().toString(), nodeType);
-				//mailNode.setProperty("resourceUrl", resourceUrl);
-				mailNode = mailNode.addNode(propertyName, "nt:resource");
-
-				Map<String, Object> authInfo = new HashMap<String, Object>();
-				authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-				try {
-					resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
-				} catch (LoginException e) {
-					log.error("Authentication error");
-					throw new RepositoryException();
-				}
-
-	//			final Resource res = resourceResolver.resolve(resourceUrl);
-	//			Node node = res.adaptTo(Node.class);
-
-				//final Resource tmplt = resourceResolver.resolve(templateUrl);
-				//Node templateNode = res.adaptTo(Node.class);
-
-				/*
-				HashMap<String, Object> bindings = variables;
-				if (bindings == null)
-					bindings = new HashMap<String, Object>();
-
-				Template tmpl = new Template(templateUrl, new StringReader(IOUtils.toString(is, configurator.getEncoding())), templateConfig);
-				bindings.put("node", new NodeModel(templateNode));
-
-				StringWriter tmplWriter = new StringWriter(32768);
-				tmpl.process(bindings, tmplWriter);
-				* /
-				mailNode.setProperty("jcr:data", new BinaryValue(templateNode(template, resource, template, variables).getBytes(configurator.getEncoding())));
-				mailNode.setProperty("jcr:lastModified", Calendar.getInstance());
-				mailNode.setProperty("jcr:mimeType", "message/rfc822");
-
-			} catch (Exception ex) {
-				log.error("Cannot create mail: ", ex);
-			} finally {
-				if (resourceResolver != null)
-					resourceResolver.close();
-				if (!haveSession && session != null) {
-					session.logout();
-			}
-		}
-
-		public void sendEmail(final MimeMessage message) throws Exception {
-			sendEmail(null, message);
-		}
-
-		public void sendEmail(Session session, final MimeMessage message) throws Exception {
-			ResourceResolver resourceResolver = null;
-			boolean haveSession = false;
-
-			try {
-				if (session != null && session.isLive()) {
-					haveSession = true;
-				} else {
-					session = repository.loginAdministrative(null);
-				}
-
-				// Store mail to Spool folder
-				Node mailNode = session.getRootNode().getNode(spoolFolder).addNode(UUID.randomUUID().toString(), nodeType);
-				mailNode = mailNode.addNode(propertyName, "nt:resource");
-
-				Map<String, Object> authInfo = new HashMap<String, Object>();
-				authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-				try {
-					resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
-				} catch (LoginException e) {
-					log.error("Authentication error");
-					throw new RepositoryException();
-				}
-
-				PipedInputStream in = new PipedInputStream();
-				final PipedOutputStream out = new PipedOutputStream(in);
-				new Thread(new Runnable() {
-					public void run() {
-						try {
-							message.writeTo(out);
-							out.close();
-						} catch (IOException e) {
-							log.error("Could not write mail message stream", e);
-						} catch (MessagingException e) {
-							log.error("Could not write mail message stream", e);
-						}
-					}
-				}).start();
-				BinaryValue bv = null;
-				try {
-					bv = new BinaryValue(in);
-				} catch (IllegalArgumentException e) {
-					// The jackrabbit closes the PipedInputStream, thats incorrect
-				}
-				if (bv != null) {
-					mailNode.setProperty("jcr:data", bv);
-				}
-				mailNode.setProperty("jcr:lastModified", Calendar.getInstance());
-				mailNode.setProperty("jcr:mimeType", "message/rfc822");
-
-			} catch (Exception ex) {
-				log.error("Cannot create mail: ", ex);
-				throw ex;
-			} finally {
-				if (resourceResolver != null)
-					resourceResolver.close();
-				if (!haveSession && session != null) {
-					session.logout();
-			}
-		}
-
-		@SuppressWarnings("unchecked")
-		public void sendEmailFromNode(Session session, String path, String template, String[] to, String[] cc, String[] bcc) throws Exception {
-			Map<String, Object> authInfo = new HashMap<String, Object>();
-			authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-			ResourceResolver resourceResolver = null;
-			try {
-				try {
-					resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
-				} catch (LoginException e) {
-					log.error("Authentication error");
-					throw new RepositoryException();
-				}
-				Resource res = resourceResolver.getResource(path);
-				Node node = null;
-		
-				if (res != null) {
-					node = res.adaptTo(Node.class);
-				}
-				if (node != null) {
-					sendEmailFromNode(session, node, template, to, cc, bcc);
-				} else {
-				
-				}
-			} finally {
-				if (resourceResolver != null) resourceResolver.close();
-			}
-
-		}
-		
-		public void sendEmailFromNode(Session session, Node node, String template, String[] to, String[] cc, String[] bcc) throws Exception {
-			sendEmailFromNode(session, node, template, null, null, null, null, to, cc, bcc, null);
-		}
-
-		@SuppressWarnings("unchecked")
-		public void sendEmailFromNode(Session session, Node node, String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
-			Map<String, Object> authInfo = new HashMap<String, Object>();
-			authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-			ResourceResolver resourceResolver = null;
-			boolean haveSession = false;
-			if (session != null && session.isLive()) {
-				haveSession = true;
-			} else {
-				session = repository.loginAdministrative(null);
-			}
-
-			try {			
-				try {
-					resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
-				} catch (LoginException e) {
-					log.error("Authentication error");
-					throw new RepositoryException();
-				}
-		
-		
-				if (node != null) {
-					Configuration templateConfig = new Configuration();
-		
-					final Resource tmplt = resourceResolver.resolve(template);
-					InputStream is = null;
-					if (tmplt != null) {
-						is = tmplt.adaptTo(InputStream.class);
-					}
-
-					String html = template;
-					if (is != null) {
-						@SuppressWarnings("rawtypes")
-						Map bindings = new HashMap();
-						Template tmpl = new Template(template, new StringReader(IOUtils.toString(is, configurator.getEncoding())), templateConfig);
-						bindings.put("node", new NodeModel(node));
-						if (variables != null) {
-							bindings.putAll(variables);
-						}
-			
-						StringWriter tmplWriter = new StringWriter(32768);
-						tmpl.process(bindings, tmplWriter);
-			
-						//        byte[] html = tmplWriter.toString().getBytes(configurator.getEncoding());
-						html = tmplWriter.toString();
-					}
-		
-					// create the messge.
-					MimeMessage mimeMessage = new MimeMessage((javax.mail.Session) null);
-		
-					MimeMultipart rootMixedMultipart = new MimeMultipart("mixed");
-					mimeMessage.setContent(rootMixedMultipart);
-		
-					MimeMultipart nestedRelatedMultipart = new MimeMultipart("related");
-					MimeBodyPart relatedBodyPart = new MimeBodyPart();
-					relatedBodyPart.setContent(nestedRelatedMultipart);
-					rootMixedMultipart.addBodyPart(relatedBodyPart);
-		
-					MimeMultipart messageBody = new MimeMultipart("alternative");
-					MimeBodyPart bodyPart = null;
-					for (int i = 0; i < nestedRelatedMultipart.getCount(); i++) {
-						BodyPart bp = nestedRelatedMultipart.getBodyPart(i);
-						if (bp.getFileName() == null) {
-							bodyPart = (MimeBodyPart) bp;
-						}
-					}
-					if (bodyPart == null) {
-						MimeBodyPart mimeBodyPart = new MimeBodyPart();
-						nestedRelatedMultipart.addBodyPart(mimeBodyPart);
-						bodyPart = mimeBodyPart;
-					}
-					bodyPart.setContent(messageBody, "text/alternative");
-		
-					// Create the plain text part of the message.
-					MimeBodyPart plainTextPart = new MimeBodyPart();
-					plainTextPart.setText(extractTextFromHtml(html), configurator.getEncoding());
-					messageBody.addBodyPart(plainTextPart);
-		
-					// Create the HTML text part of the message.
-					MimeBodyPart htmlTextPart = new MimeBodyPart();
-					htmlTextPart.setContent(html, "text/html;charset=" + configurator.getEncoding()); // ;charset=UTF-8
-					messageBody.addBodyPart(htmlTextPart);
-		
-					prepareMimeMessage(mimeMessage, node, template, subject, replyTo, from, date, to, cc, bcc, variables);
-					sendEmail(session, mimeMessage);
-				}
-			} finally {
-				if (resourceResolver != null) resourceResolver.close();
-				if (!haveSession && session != null) { session.logout();
-			}
-		}
 
 	/**
 	 * {@inheritDoc}
@@ -650,14 +415,14 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmail(String content, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmail(String content, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateString(null, content, (Node)null, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmail(Session session, String content, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmail(Session session, String content, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateString(session, content, (Node)null, null, null, null, null, to, cc, bcc, null);
 	}
 
@@ -975,133 +740,133 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateString(String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateString(String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateString(String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateString(Session session, String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateString(Session session, String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateString(Session session, String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateNode(String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateNode(String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Node template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateNode(Node template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Node template, String resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Node template, String resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Node template, Node resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Node template, Node resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, null, null, null, null, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Node template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Node template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, null, null, null, null, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, String resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String[] to, String[] cc, String[] bcc) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, String resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, Node template, String resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(session, getNodeContentAsString(template), (Node)null, null, null, null, null, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
 			if (session != null && session.isLive()) {
@@ -1126,14 +891,14 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, Node template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(session, getNodeContentAsString(template), (Node)null, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
 			if (session != null && session.isLive()) {
@@ -1158,7 +923,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, Node template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
 			if (session != null && session.isLive()) {
@@ -1183,7 +948,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
 			if (session != null && session.isLive()) {
@@ -1208,14 +973,14 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(session, getNodeContentAsString(template), resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		Session session = null;
 		try {
 			session = repository.loginAdministrative(null);
@@ -1236,42 +1001,42 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Node template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Node template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateNode(Node template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateNode(Node template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(getNodeContentAsString(template), resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateString(String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateString(String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, String resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateString(Session session, String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
 			if (session != null && session.isLive()) {
@@ -1296,7 +1061,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
-	public void sendEmailFromTemplateString(Session session, String template, Node resource, String subject, String replyTo, String from, Date date, String[] to, String[] cc, String[] bcc, HashMap<String, Object> variables) throws Exception {
+	public void sendEmailFromTemplateString(Session session, String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 
 		try {
@@ -1346,9 +1111,33 @@ public class EmailServiceImpl implements EmailService {
 			htmlTextPart.setContent(html, "text/html;charset=" + configurator.getEncoding()); // ;charset=UTF-8
 			messageBody.addBodyPart(htmlTextPart);
 
+			// Check if resource have nt:file childs adds as attachment
+			if (resource != null && resource.hasNodes()) {
+				NodeIterator iter = resource.getNodes();
+				while (iter.hasNext()) {
+					Node n = iter.nextNode();
+					if (n.getPrimaryNodeType().isNodeType("nt:file")) {
+						// Part two is attachment
+						MimeBodyPart attachmentBodyPart = new MimeBodyPart();
+						InputStream fileData = n.getNode("jcr:content").getProperty("jcr:data").getBinary().getStream();
+						String mimeType = n.getNode("jcr:content").getProperty("jcr:mimeType").getString();
+						String fileName = n.getName();
+						
+						DataSource source = new StreamDataSource(fileData, fileName, mimeType);
+					    attachmentBodyPart.setDataHandler(
+					      new DataHandler(source));
+					    attachmentBodyPart.setFileName(fileName);
+					    attachmentBodyPart.setDisposition(MimeBodyPart.ATTACHMENT);
+					    attachmentBodyPart.setContentID(fileName);
+					    rootMixedMultipart.addBodyPart(attachmentBodyPart);
+					    
+					}
+				}
+			}
+
 			prepareMimeMessage(mimeMessage, resource, template, subject, replyTo, from, date, to, cc, bcc, variables);
 			sendEmail(session, mimeMessage);
-			// TODO : Attachments
+			
 			//
 		} finally {
 			if (!haveSession && session != null) {

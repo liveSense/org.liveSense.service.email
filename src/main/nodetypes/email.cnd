@@ -4,3 +4,5 @@
 <jcr = 'http://www.jcp.org/jcr/1.0'>
 
 [email:email] > nt:file
+- 'nextTry'  (Long)
+- 'retryCount' (Long)

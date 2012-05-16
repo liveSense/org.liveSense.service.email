@@ -17,18 +17,32 @@
 
 package org.liveSense.service.email;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.StringWriter;
+import java.util.Dictionary;
 import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.Map;
 
 import javax.jcr.Node;
 import javax.jcr.PathNotFoundException;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
+import javax.jcr.query.Query;
+import javax.jcr.query.QueryManager;
+import javax.jcr.query.QueryResult;
+import javax.jcr.query.Row;
+import javax.jcr.query.RowIterator;
+import javax.mail.Authenticator;
 import javax.mail.MessagingException;
 import javax.mail.PasswordAuthentication;
-import javax.mail.Transport;
+import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
+import javax.mail.internet.MimeMessage.RecipientType;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.ConfigurationPolicy;
@@ -49,6 +63,7 @@ import org.apache.sling.jcr.api.SlingRepository;
 import org.apache.sling.jcr.resource.JcrResourceConstants;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.event.Event;
+import org.osgi.service.event.EventAdmin;
 import org.osgi.service.event.EventHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,91 +74,104 @@ import org.slf4j.LoggerFactory;
  * @created Feb 14, 2010
  */
 
-@Component(label="%emailSendJobEventHandler.name",
-        description="%emailSendJobEventHandler.description",
-        immediate=true,
-        metatype=true,
-        policy=ConfigurationPolicy.OPTIONAL)
-@Service(value = org.osgi.service.event.EventHandler.class)
-@Properties(value={
-		@Property(name = "event.topics", value = {
-				EmailResourceChangeListener.EMAIL_SEND_TOPIC,
-				EmailResourceChangeListener.EMAIL_REMOVE_TOPIC }),
-	    @Property(name=EmailSendJobEventHandler.PARAM_SMTP_HOST, 
-	    	label="%smtpHost.name", 
-	    	description="%smtpHost.description", 
-	    	value=EmailSendJobEventHandler.DEFAULT_SMTP_HOST),
-	    @Property(name=EmailSendJobEventHandler.PARAM_SMTP_PORT, 
-	    	label="%smtpPort.name", 
-	    	description="%smtpPort.description", 
-	    	longValue=EmailSendJobEventHandler.DEFAULT_SMTP_PORT),
-	    @Property(name=EmailSendJobEventHandler.PARAM_SMTP_CONNECTION_TIMEOUT, 
-	    	label="%smtpConnectionTimeout.name", 
-	    	description="%smtpConnectionTimeout.description", 
-	    	longValue=EmailSendJobEventHandler.DEFAULT_SMTP_CONNECTION_TIMEOUT),
-		@Property(name=EmailSendJobEventHandler.PARAM_SMTP_SSL_ENABLE, 
-			label="%smtpSslEnable.name", 
-			description="%smtpSslEnable.description", 
-			boolValue=EmailSendJobEventHandler.DEFAULT_SMTP_SSL_ENABLE),	    
-	    @Property(name=EmailSendJobEventHandler.PARAM_SMTP_USER_NAME, 
-	    	label="%smtpUserName.name", 
-	    	description="%smtpUserName.description", 
-	    	value=EmailSendJobEventHandler.DEFAULT_SMTP_USER_NAME),	    
-	    @Property(name=EmailSendJobEventHandler.PARAM_SMTP_PASSWORD, 
-	    	label="%smtpPassword.name", 
-	    	description="%smtpPassword.description", 
-	    	value=EmailSendJobEventHandler.DEFAULT_SMTP_PASSWORD),	    
-	    @Property(name=EmailSendJobEventHandler.PARAM_SPOOL_FOLDER, 
-	    	label="%spoolFolder.name", 
-	    	description="%spoolFolder.description", 
-	    	value=EmailSendJobEventHandler.DEFAULT_SPOOL_FOLDER)	    
+@Component(label = "%emailSendJobEventHandler.name", description = "%emailSendJobEventHandler.description", immediate = true, metatype = true, policy = ConfigurationPolicy.OPTIONAL)
+@Service(value = {org.osgi.service.event.EventHandler.class, java.lang.Runnable.class})
+@Properties(value = { @Property(name = "event.topics", value = { EmailResourceChangeListener.EMAIL_SEND_TOPIC, EmailResourceChangeListener.EMAIL_REMOVE_TOPIC }),
+		@Property(
+				name="scheduler.name", 
+				value="EmailSendJobEventHandler"),
+		@Property(
+				name="scheduler.expression", 
+				value="0 * * ? * * "),
+		@Property(name = EmailSendJobEventHandler.PARAM_NODE_TYPE, label = "%nodeType.name", description = "%nodeType.description", value = EmailSendJobEventHandler.DEFAULT_NODE_TYPE),
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_HOST, label = "%smtpHost.name", description = "%smtpHost.description", value = EmailSendJobEventHandler.DEFAULT_SMTP_HOST),
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_PORT, label = "%smtpPort.name", description = "%smtpPort.description", longValue = EmailSendJobEventHandler.DEFAULT_SMTP_PORT),
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_CONNECTION_TIMEOUT, label = "%smtpConnectionTimeout.name", description = "%smtpConnectionTimeout.description", longValue = EmailSendJobEventHandler.DEFAULT_SMTP_CONNECTION_TIMEOUT),
+		@Property(name = EmailSendJobEventHandler.PARAM_INITIAL_RETRY_DELAY, label = "%initialRetryDelay.name", description = "%initialRetryDelay.description", longValue = EmailSendJobEventHandler.DEFAULT_INITIAL_RETRY_DELAY),
+		@Property(name = EmailSendJobEventHandler.PARAM_ADDITIONAL_RANDOM_RETRY_DELAY, label = "%additionalRandomRetryDelay.name", description = "%additionalRandomRetryDelay.description", longValue = EmailSendJobEventHandler.DEFAULT_ADDITIONAL_RANDOM_RETRY_DELAY),
+		@Property(name = EmailSendJobEventHandler.PARAM_MAXIMUM_RETRY, label = "%maximumRetry.name", description = "%maximumRetry.description", longValue = EmailSendJobEventHandler.DEFAULT_MAXIMUM_RETRY),
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_SSL_ENABLE, label = "%smtpSslEnable.name", description = "%smtpSslEnable.description", boolValue = EmailSendJobEventHandler.DEFAULT_SMTP_SSL_ENABLE),
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_STARTTLS_ENABLE, label = "%smtpStartTlsEnable.name", description = "%smtpStartTlsEnable.description", boolValue = EmailSendJobEventHandler.DEFAULT_SMTP_STARTLS_ENABLE),
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_USER_NAME, label = "%smtpUserName.name", description = "%smtpUserName.description", value = EmailSendJobEventHandler.DEFAULT_SMTP_USER_NAME),
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_PASSWORD, label = "%smtpPassword.name", description = "%smtpPassword.description", value = EmailSendJobEventHandler.DEFAULT_SMTP_PASSWORD),
+		@Property(name = EmailSendJobEventHandler.PARAM_SPOOL_FOLDER, label = "%spoolFolder.name", description = "%spoolFolder.description", value = EmailSendJobEventHandler.DEFAULT_SPOOL_FOLDER),
+		@Property(name = EmailSendJobEventHandler.PARAM_TEST_MAIL_ADDRESS, label = "%testMailAddress.name", description = "%testMailAddress.description", value = EmailSendJobEventHandler.DEFAULT_TEST_MAIL_ADDRESS), 
+		@Property(name = EmailSendJobEventHandler.PARAM_SMTP_DEBUG, label = "%smtpDebug.name", description = "%smtpDebug.description", boolValue = EmailSendJobEventHandler.DEFAULT_SMTP_DEBUG) 
 })
-
-public class EmailSendJobEventHandler
-		implements JobProcessor, EventHandler {
+public class EmailSendJobEventHandler implements JobProcessor, EventHandler, Runnable {
 
 	/**
 	 * default log
 	 */
-	private final Logger log = LoggerFactory
-			.getLogger(EmailSendJobEventHandler.class);
+	private final Logger log = LoggerFactory.getLogger(EmailSendJobEventHandler.class);
+
+	public static final String PARAM_NODE_TYPE = EmailResourceChangeListener.PARAM_NODE_TYPE;
+	public static final String DEFAULT_NODE_TYPE = EmailResourceChangeListener.NODE_TYPE_EMAIL;
 
 	public static final String PARAM_SMTP_HOST = "smtpHost";
-    public static final String DEFAULT_SMTP_HOST = "localhost";
+	public static final String DEFAULT_SMTP_HOST = "localhost";
 
-    public static final String PARAM_SMTP_PORT = "smtpPort";
-    public static final long DEFAULT_SMTP_PORT = 25;
+	public static final String PARAM_SMTP_PORT = "smtpPort";
+	public static final long DEFAULT_SMTP_PORT = 25;
 
-    public static final String PARAM_SMTP_CONNECTION_TIMEOUT = "smtpConnectionTimeout";
-    public static final long DEFAULT_SMTP_CONNECTION_TIMEOUT = 10000;
-    
-    public static final String PARAM_SMTP_SSL_ENABLE = "smtpSslEnable";
-    public static final boolean DEFAULT_SMTP_SSL_ENABLE = false;
+	public static final String PARAM_SMTP_CONNECTION_TIMEOUT = "smtpConnectionTimeout";
+	public static final long DEFAULT_SMTP_CONNECTION_TIMEOUT = 10000;
 
-    public static final String PARAM_SMTP_USER_NAME = "smtpUserName";
-    public static final String DEFAULT_SMTP_USER_NAME = "";
+	public static final String PARAM_INITIAL_RETRY_DELAY = "initialRetryDelay";
+	public static final long DEFAULT_INITIAL_RETRY_DELAY = 5 * 1000 * 60;
 
-    public static final String PARAM_SMTP_PASSWORD = "smtpPassword";
-    public static final String DEFAULT_SMTP_PASSWORD = "";
+	public static final String PARAM_ADDITIONAL_RANDOM_RETRY_DELAY = "additionalRandomRetryDelay";
+	public static final long DEFAULT_ADDITIONAL_RANDOM_RETRY_DELAY = 5 * 1000 * 60;
 
+	public static final String PARAM_MAXIMUM_RETRY = "maximumRetry";
+	public static final long DEFAULT_MAXIMUM_RETRY = 12;
 
-    public static final String PARAM_SPOOL_FOLDER = "spoolFolder";
-    public static final String DEFAULT_SPOOL_FOLDER = "/var/spool/queue/mail/";
+	public static final String PARAM_SMTP_SSL_ENABLE = "smtpSslEnable";
+	public static final boolean DEFAULT_SMTP_SSL_ENABLE = false;
 
-    private String smtpHost = DEFAULT_SMTP_HOST;
-    private long smtpPort = DEFAULT_SMTP_PORT;
-    private long smtpConnectionTimeout = DEFAULT_SMTP_CONNECTION_TIMEOUT;
-    private boolean smtpSslEnable = DEFAULT_SMTP_SSL_ENABLE;
-    private String smtpUserName = DEFAULT_SMTP_USER_NAME;
-    private String smtpPassword = DEFAULT_SMTP_PASSWORD;
-    private String spoolFolder = DEFAULT_SPOOL_FOLDER;
+	public static final String PARAM_SMTP_STARTTLS_ENABLE = "smtpStartTlsEnable";
+	public static final boolean DEFAULT_SMTP_STARTLS_ENABLE = false;
 
+	public static final String PARAM_SMTP_USER_NAME = "smtpUserName";
+	public static final String DEFAULT_SMTP_USER_NAME = "";
+
+	public static final String PARAM_SMTP_PASSWORD = "smtpPassword";
+	public static final String DEFAULT_SMTP_PASSWORD = "";
+
+	public static final String PARAM_SPOOL_FOLDER = "spoolFolder";
+	public static final String DEFAULT_SPOOL_FOLDER = "/var/spool/queue/mail/";
+
+	public static final String PARAM_TEST_MAIL_ADDRESS = "testMailAddress";
+	public static final String DEFAULT_TEST_MAIL_ADDRESS = "test@example.com";
+
+	public static final String PARAM_SMTP_DEBUG = "smtpDebug";
+	public static final boolean DEFAULT_SMTP_DEBUG = false;
+
+	private String smtpHost = DEFAULT_SMTP_HOST;
+	private long smtpPort = DEFAULT_SMTP_PORT;
+	private long smtpConnectionTimeout = DEFAULT_SMTP_CONNECTION_TIMEOUT;
+
+	private long initialRetryDelay = DEFAULT_INITIAL_RETRY_DELAY;
+	private long additionalRandomRetryDelay = DEFAULT_ADDITIONAL_RANDOM_RETRY_DELAY;
+	private long maximumRetry = DEFAULT_MAXIMUM_RETRY;
+
+	private boolean smtpSslEnable = DEFAULT_SMTP_SSL_ENABLE;
+	private boolean smtpStartTlsEnable = DEFAULT_SMTP_STARTLS_ENABLE;
+	private String smtpUserName = DEFAULT_SMTP_USER_NAME;
+	private String smtpPassword = DEFAULT_SMTP_PASSWORD;
+	private String spoolFolder = DEFAULT_SPOOL_FOLDER;
+	private String testMailAddress = DEFAULT_TEST_MAIL_ADDRESS;
+	private boolean smtpDebug = DEFAULT_SMTP_DEBUG;
+	private String nodeType = DEFAULT_NODE_TYPE;
 
 	@Reference
 	SlingRepository repository;
 
 	@Reference
 	ResourceResolverFactory resourceResolverFactory;
+	
+	@Reference
+	EventAdmin eventAdmin;
 
 	/**
 	 * Activates this component.
@@ -152,40 +180,41 @@ public class EmailSendJobEventHandler
 	 *            The OSGi <code>ComponentContext</code> of this component.
 	 */
 	@Activate
-	protected void activate(ComponentContext componentContext)
-			throws RepositoryException {
+	protected void activate(ComponentContext componentContext) throws RepositoryException {
 
 		smtpHost = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SMTP_HOST), DEFAULT_SMTP_HOST);
 		smtpPort = PropertiesUtil.toLong(componentContext.getProperties().get(PARAM_SMTP_PORT), DEFAULT_SMTP_PORT);
 		smtpConnectionTimeout = PropertiesUtil.toLong(componentContext.getProperties().get(PARAM_SMTP_CONNECTION_TIMEOUT), DEFAULT_SMTP_CONNECTION_TIMEOUT);
-		smtpSslEnable = PropertiesUtil.toBoolean(componentContext.getProperties().get(PARAM_SMTP_SSL_ENABLE), DEFAULT_SMTP_SSL_ENABLE);
-		smtpUserName = PropertiesUtil.toString(componentContext.getProperties().get(DEFAULT_SMTP_USER_NAME), DEFAULT_SMTP_USER_NAME);
-		smtpPassword = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SMTP_PASSWORD), DEFAULT_SMTP_PASSWORD);
-		spoolFolder = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
 
-    	Session admin = repository.loginAdministrative(null);
-    	if (spoolFolder.startsWith("/")) spoolFolder = spoolFolder.substring(1);
-    	
-    	String spoolFolders[] = spoolFolder.split("/");
-    	Node n = admin.getRootNode();
-    	for (int i = 0; i < spoolFolders.length; i++) {
+		initialRetryDelay = PropertiesUtil.toLong(componentContext.getProperties().get(PARAM_INITIAL_RETRY_DELAY), DEFAULT_INITIAL_RETRY_DELAY);
+		additionalRandomRetryDelay = PropertiesUtil.toLong(componentContext.getProperties().get(PARAM_ADDITIONAL_RANDOM_RETRY_DELAY), DEFAULT_ADDITIONAL_RANDOM_RETRY_DELAY);
+		maximumRetry = PropertiesUtil.toLong(componentContext.getProperties().get(PARAM_MAXIMUM_RETRY), DEFAULT_MAXIMUM_RETRY);
+
+		smtpSslEnable = PropertiesUtil.toBoolean(componentContext.getProperties().get(PARAM_SMTP_SSL_ENABLE), DEFAULT_SMTP_SSL_ENABLE);
+		smtpStartTlsEnable = PropertiesUtil.toBoolean(componentContext.getProperties().get(PARAM_SMTP_STARTTLS_ENABLE), DEFAULT_SMTP_STARTLS_ENABLE);
+		smtpUserName = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SMTP_USER_NAME), DEFAULT_SMTP_USER_NAME);
+		smtpPassword = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SMTP_PASSWORD), DEFAULT_SMTP_PASSWORD);
+
+		spoolFolder = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_SPOOL_FOLDER), DEFAULT_SPOOL_FOLDER);
+		testMailAddress = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_TEST_MAIL_ADDRESS), DEFAULT_TEST_MAIL_ADDRESS);
+		smtpDebug = PropertiesUtil.toBoolean(componentContext.getProperties().get(PARAM_SMTP_DEBUG), DEFAULT_SMTP_DEBUG);
+		nodeType = PropertiesUtil.toString(componentContext.getProperties().get(PARAM_NODE_TYPE), DEFAULT_NODE_TYPE);
+
+		Session admin = repository.loginAdministrative(null);
+		if (spoolFolder.startsWith("/"))
+			spoolFolder = spoolFolder.substring(1);
+
+		String spoolFolders[] = spoolFolder.split("/");
+		Node n = admin.getRootNode();
+		for (int i = 0; i < spoolFolders.length; i++) {
 			if (!n.hasNode(spoolFolders[i])) {
 				n = n.addNode(spoolFolders[i]);
 			} else {
 				n = n.getNode(spoolFolders[i]);
 			}
 		}
-    	admin.save();
-    	admin.logout();
-
-        /*
-        Properties sysprops = System.getProperties();
-        sysprops.put("mail.smtp.host", smtpHost);
-        sysprops.put("mail.smtp.port", Long.toString(smtpPort));
-        sysprops.put("mail.smtp.connectiontimeout", Long.toString(smtpConnectionTimeout));
-        sysprops.put("mail.smtp.timeout", Long.toString(smtpConnectionTimeout));
-        sysprops.put("mail.smtp.ssl.enable", Boolean.toString(smtpSslEnable));
-         */
+		admin.save();
+		admin.logout();
 	}
 
 	public void handleEvent(Event event) {
@@ -201,152 +230,219 @@ public class EmailSendJobEventHandler
 		try {
 			String resourcePath = (String) event.getProperty("resourcePath");
 			String nodeType = (String) event.getProperty(EmailResourceChangeListener.PARAM_NODE_TYPE);
-			String propertyName = (String) event.getProperty(EmailResourceChangeListener.PARAM_PROPERTY_NAME);
+//			String propertyName = (String) event.getProperty(EmailResourceChangeListener.PARAM_PROPERTY_NAME);
 
 			session = repository.loginAdministrative(null);
 
 			Map<String, Object> authInfo = new HashMap<String, Object>();
-			authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION,
-					session);
+			authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
 			try {
-				resourceResolver = resourceResolverFactory
-						.getResourceResolver(authInfo);
+				resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
 			} catch (LoginException e) {
 				log.error("Authentication error");
 				return false;
 			}
 
-				if (event
-						.getTopic()
-						.equals(EmailResourceChangeListener.EMAIL_REMOVE_TOPIC)) {
-					// remove
-					return deleteMail(session, resourcePath);
-				} else if (event
-						.getTopic()
-						.equals(EmailResourceChangeListener.EMAIL_SEND_TOPIC)) {
-					// insert
-					Resource res = resourceResolver.getResource(resourcePath);
-					if (ResourceUtil.isA(res, nodeType)) {
-						return sendMail(session, resourcePath);
-					} else {
-					    log.error("NodeTypeConflict - expected: "+nodeType+" actual: "+res.getResourceType());
-					    return false;
-					}
+			if (event.getTopic().equals(EmailResourceChangeListener.EMAIL_REMOVE_TOPIC)) {
+				// remove
+				return deleteMail(session, resourcePath);
+			} else if (event.getTopic().equals(EmailResourceChangeListener.EMAIL_SEND_TOPIC)) {
+				// insert
+				Resource res = resourceResolver.getResource(resourcePath);
+				if (ResourceUtil.isA(res, nodeType)) {
+					return sendMail(session, resourcePath);
+				} else {
+					log.error("NodeTypeConflict - expected: " + nodeType + " actual: " + res.getResourceType());
+					return false;
 				}
+			}
 			return true;
 		} catch (RepositoryException e) {
-			log.error("process - "+ e, e);
+			log.error("process - " + e, e);
 			return false;
 		} catch (Exception e) {
 			log.error("process - " + e, e);
 			return false;
 		} finally {
-		    if (resourceResolver != null) resourceResolver.close();
-			if (session != null) {
+			if (resourceResolver != null)
+				resourceResolver.close();
+			if (session != null && session.isLive()) {
+				try {
+					if (session.hasPendingChanges()) {
+						session.save();
+					}
+				} catch (Exception e) {
+					log.error("Could not save session", e);
+				}
 				session.logout();
 				session = null;
 			}
 		}
 	}
 
-    public boolean sendMail(Session session, String path) throws RepositoryException, Exception {
-	    ResourceResolver resourceResolver = null;
+	private void updateFailedMailJob(Node mailNode) {
+		if (mailNode != null) {
+			// This was the first unsuccessfull try
+			try {
+				if (!mailNode.hasProperty("retryCount")) {
+					mailNode.setProperty("retryCount", new Long(1));
+					// Calculating the time of next try.
+					long nextTry = (new Double(
+							new Long(initialRetryDelay).doubleValue() +
+							new Long(System.currentTimeMillis()).doubleValue() + 
+							Math.random()*new Long(additionalRandomRetryDelay).doubleValue()
+							).longValue());
+					
+					mailNode.setProperty("nextTry", nextTry);
 
-    		try {
-		    log.info("Sending email: " + path);
+				} else {
+					// If the number of tries exceeds maximumRetry, remove the spool
+					if (mailNode.getProperty("retryCount").getLong() >= maximumRetry) {
+						mailNode.remove();
+						return;
+					}
+					// Increase retry counter
+					mailNode.setProperty("retryCount", mailNode.getProperty("retryCount").getLong()+1);
+					// Calculating the time of next try. Exponential intervals are in the retries
+					long nextTry = (new Double(
+							Math.exp(new Double( new Long(mailNode.getProperty("retryCount").getLong()).doubleValue() )) * new Long(initialRetryDelay).doubleValue() +
+							new Long(System.currentTimeMillis()).doubleValue() + 
+							Math.random()*new Long(additionalRandomRetryDelay).doubleValue()
+							).longValue());
+					
+					mailNode.setProperty("nextTry", nextTry);
+				}
+			} catch (Throwable e) {
+				log.error("Could not update failed mail job", e);
+			}
+		}
+	}
 	
-		    Map<String, Object> authInfo = new HashMap<String, Object>();
-		    authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-		    try {
+	@SuppressWarnings("static-access")
+	public boolean sendMail(Session session, String path) throws RepositoryException, Exception {
+		ResourceResolver resourceResolver = null;
+		ByteArrayOutputStream debugPrintOut = null;
+
+		try {
+			log.info("Sending email: " + path);
+
+			Map<String, Object> authInfo = new HashMap<String, Object>();
+			authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
+			try {
 				resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
-		    } catch (LoginException e) {
+			} catch (LoginException e) {
 				log.error("Authentication error");
 				throw new RepositoryException();
-		    }
-	
-		    Resource res = resourceResolver.getResource(path);
-		    Node node = res.adaptTo(Node.class);
-	
-		    if (node != null) {
+			}
+
+			Resource res = resourceResolver.getResource(path);
+			Node node = res.adaptTo(Node.class);
+
+			if (node != null) {
 				// Sending mail to SMTP
 				try {
-				    log.info("Sending email: " + node.getName());
-				    MimeMessage msg = new MimeMessage(getMailSession(), 
-				    	node.getNode("jcr:content").getProperty("jcr:data").getBinary().getStream());
-				    if (msg.getAllRecipients() != null) {
-					    log.info("  --> Transporting to: "+ msg.getAllRecipients()[0].toString());
-					    Transport.send(msg);
-					    try {
+					log.info("Sending email: " + node.getName());
+					javax.mail.Session mailSession = getMailSession();
+
+					PrintStream debugPrintStream = null;
+
+					if (smtpDebug) {
+						debugPrintOut = new ByteArrayOutputStream();
+						debugPrintStream =  new PrintStream(debugPrintOut);
+						mailSession.setDebug(true);
+						mailSession.setDebugOut(debugPrintStream);
+					}
+					
+					MimeMessage msg = new MimeMessage(mailSession, node.getNode("jcr:content").getProperty("jcr:data").getBinary().getStream());
+					if (StringUtils.isNotEmpty(testMailAddress)) {
+						msg.setRecipient(RecipientType.TO,  new InternetAddress(testMailAddress));
+//						msg.setRecipient(RecipientType.BCC, (InternetAddress)null);
+//						msg.setRecipient(RecipientType.CC, (InternetAddress)null);
+					}
+					if (msg.getAllRecipients() != null) {
+						log.info("  --> Transporting to: " + msg.getAllRecipients()[0].toString());
+						if (smtpSslEnable) mailSession.getTransport("smtps").send(msg);
+						else  mailSession.getTransport("smtp").send(msg);
+						try {
 							node.remove();
-					    } catch (RepositoryException ex) {
+						} catch (RepositoryException ex) {
 							log.error("Could not remove mail from spool folder: " + node.getName(), ex);
-							return false;
-					    }
-				    } else {
-					    log.warn("  --> No recepients, removing "+ node.getName());
-					    try {
+							return true;
+						}
+					} else {
+						log.warn("  --> No recepients, removing " + node.getName());
+						try {
 							node.remove();
-					    } catch (RepositoryException ex) {
+						} catch (RepositoryException ex) {
 							log.error("Could not remove mail from spool folder: " + node.getName(), ex);
-							return false;
-					    }
-				    	
-				    }
+							return true;
+						}
+
+					}
 				} catch (MessagingException ex) {
-				    log.error("Message could not be send: " + node.getName(), ex);
-				    return false;
+					log.error("Message could not be send: " + node.getName(), ex);
+					updateFailedMailJob(node);
+					return true;
 				} catch (PathNotFoundException ex) {
-				    log.error("Path not found - maybe not a nt:file node?: "
-					    + node.getName(), ex);
-				    return false;
+					log.error("Path not found - maybe not a nt:file node?: " + node.getName(), ex);
+					try {
+						node.remove();
+					} catch (Throwable e) {
+					}
+					return true;
 				} catch (RepositoryException ex) {
-				    log.error("Repository error: " + node.getName(), ex);
-				    return false;
+					log.error("Repository error: " + node.getName(), ex);
+					updateFailedMailJob(node);
+					return true;
 				}
 				return true;
-		    }
-		    return false;
+			}
+			updateFailedMailJob(node);
+			return true;
 		} finally {
-		    if (resourceResolver != null) resourceResolver.close();
-		}
-    }
+			if (debugPrintOut != null) {
+				log.info(debugPrintOut.toString());
+			}
 
-	public boolean deleteMail(Session session, String path)
-			throws RepositoryException, Exception {
-	    ResourceResolver resourceResolver = null;
+			if (resourceResolver != null)
+				resourceResolver.close();
+		}
+	}
+
+	public boolean deleteMail(Session session, String path) throws RepositoryException, Exception {
+		ResourceResolver resourceResolver = null;
 		try {
 			log.info("Removing email: " + path);
 
 			Map<String, Object> authInfo = new HashMap<String, Object>();
-		    authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
-		    try {
+			authInfo.put(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session);
+			try {
 				resourceResolver = resourceResolverFactory.getResourceResolver(authInfo);
-		    } catch (LoginException e) {
+			} catch (LoginException e) {
 				log.error("Authentication error");
 				throw new RepositoryException();
-		    }
-	
-		    Resource res = resourceResolver.getResource(path);
-		    Node node = null;
-		    	if (res != null) {
-		    		node = res.adaptTo(Node.class);
-		    	}
-		    if (node != null) {
+			}
+
+			Resource res = resourceResolver.getResource(path);
+			Node node = null;
+			if (res != null) {
+				node = res.adaptTo(Node.class);
+			}
+			if (node != null) {
 				// Removing node
-		    		node.remove();
-		    }
+				node.remove();
+			}
 			return true;
 
-	    } catch (RepositoryException e) {
-	    		log.error("Email remove", e);
-	    		throw e;
+		} catch (RepositoryException e) {
+			log.error("Email remove", e);
+			throw e;
 		} finally {
-		    if (resourceResolver != null) resourceResolver.close();
+			if (resourceResolver != null)
+				resourceResolver.close();
 		}
 	}
 
-
-	
 	/*
 	 * mail.smtp.user	String	Default user name for SMTP.
 	mail.smtp.host	String	The SMTP server to connect to.
@@ -393,30 +489,77 @@ public class EmailSendJobEventHandler
 
 		java.util.Properties properties = new java.util.Properties();
 		Authenticator authenticator = null;
-		if (smtpUserName != null && !"".equals(smtpUserName)) {
-        		authenticator = new Authenticator(smtpUserName, smtpPassword);
-        		//properties.setProperty("mail.smtp.submitter", authenticator.getPasswordAuthentication().getUserName());
-        		properties.setProperty("mail.smtp.auth", "true");
+		if (StringUtils.isNotEmpty(smtpUserName)) {
+			authenticator = new javax.mail.Authenticator() {
+				protected PasswordAuthentication getPasswordAuthentication() {
+					return new PasswordAuthentication(smtpUserName, smtpPassword);
+				}
+			};
+			properties.setProperty("mail.smtp.auth", "true");
 		}
+		
 		properties.setProperty("mail.smtp.host", smtpHost);
 		properties.setProperty("mail.smtp.port", Long.toString(smtpPort));
 		properties.setProperty("mail.smtp.connectiontimeout", Long.toString(smtpConnectionTimeout));
 		properties.setProperty("mail.smtp.timeout", Long.toString(smtpConnectionTimeout));
 		properties.setProperty("mail.smtp.ssl.enable", Boolean.toString(smtpSslEnable));
+		properties.setProperty("mail.smtp.startls.enable", Boolean.toString(smtpStartTlsEnable));
+		if (smtpSslEnable) {
+			properties.setProperty("mail.smtp.socketFactory.port", Long.toString(smtpPort));
+			properties.setProperty("mail.smtp.socketFactory.fallback", "false");
+			properties.setProperty("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+		}
+		if (smtpDebug) {
+			properties.setProperty("mail.debug", "true");
+			StringWriter writer = new StringWriter();
+			try {
+				properties.store(writer, "");
+			} catch (IOException e) {
+			}
+			log.info(writer.toString());
+		}
 
 		return javax.mail.Session.getInstance(properties, authenticator);
 	}
 
-	private class Authenticator extends javax.mail.Authenticator {
-		private PasswordAuthentication authentication;
-
-		public Authenticator(final String username, final String password) {
-		    super();
-		    authentication = new PasswordAuthentication(username, password);
+	/*
+	 * Checking the spool folder for mails have not been sent yet,
+	 * 
+	 * @see java.lang.Runnable#run()
+	 */
+	public void run() {
+		Session session = null;
+		try {
+			
+			// Searcing in spool for mails
+			session = repository.loginAdministrative(null);
+			QueryManager queryManager = session.getWorkspace().getQueryManager();
+			Query query = queryManager.createQuery("/jcr:root/"+spoolFolder+"*[@jcr:primaryType='email:email' and @nextTry<"+System.currentTimeMillis()+"]", Query.XPATH);
+			QueryResult res = query.execute();
+			RowIterator iter = res.getRows();
+			while (iter.hasNext()) {
+				Row row = iter.nextRow();
+				String path =row.getPath();
+				try {
+					log.info("Retry send email: "+path);
+	
+					final Dictionary<String, Object> props = new Hashtable<String, Object>();
+			        props.put(JobUtil.PROPERTY_JOB_TOPIC, EmailResourceChangeListener.EMAIL_SEND_TOPIC);
+			        props.put("resourcePath", path);
+			        props.put(EmailResourceChangeListener.PARAM_NODE_TYPE, nodeType);
+			        //props.put(EmailResourceChangeListener.PARAM_PROPERTY_NAME, propertyName);
+			        org.osgi.service.event.Event emailSendJob = new org.osgi.service.event.Event(JobUtil.TOPIC_JOB, props);
+			        eventAdmin.sendEvent(emailSendJob);
+				} catch (Exception e) {
+					log.error("Could not send email: "+path,e);
+				}
+			}
+		} catch (Exception e2) {
+			log.error("Error on periodical run: ", e2);
+		} finally {
+			if (session != null && session.isLive()) {
+				session.logout();
+			}
 		}
-
-		protected PasswordAuthentication getPasswordAuthentication() {
-			return authentication;
-		}
-	}
+	}	
 }
