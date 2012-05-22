@@ -61,21 +61,13 @@
 							org.liveSense.service.email.*;version=${project.version},
 							org.liveSense.template.freemarker.wrapper.*;version=${project.version},
 						</Export-Package>
-			            <_exportcontents>
-							javax.mail.*,
-							javax.activation.*
-			            </_exportcontents>
 
 						<Import-Package>
 							*;resolution:=optional
 						</Import-Package>
 
 						<Embed-Dependency>
-							mail,
-							mailapi,
-							activation,
 							boilerpipe,
-							xercesImpl,
 							nekohtml
 						</Embed-Dependency>
 
