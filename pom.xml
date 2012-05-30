@@ -34,7 +34,7 @@
 	<artifactId>org.liveSense.service.email</artifactId>
 	<packaging>bundle</packaging>
 	<version>1.0.1-SNAPSHOT</version>
-	<name>liveSense Email service</name>
+	<name>liveSense :: Service :: Email compositing and sending</name>
 	<description>liveSense Email service. It's storing the mails in /var/spool and a Job sends it periodically</description>
 	<repositories>
 		<repository>
