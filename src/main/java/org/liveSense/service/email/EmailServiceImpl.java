@@ -23,16 +23,17 @@ import java.io.PipedOutputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Dictionary;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
-import javax.activation.FileDataSource;
 import javax.jcr.Node;
 import javax.jcr.NodeIterator;
 import javax.jcr.PathNotFoundException;
@@ -45,14 +46,12 @@ import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.internet.AddressException;
 import javax.mail.internet.InternetAddress;
-import javax.mail.internet.InternetHeaders;
 import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
 import javax.mail.internet.MimeUtility;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -76,7 +75,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import de.l3s.boilerpipe.extractors.ArticleExtractor;
-
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
@@ -217,13 +215,26 @@ public class EmailServiceImpl implements EmailService {
 		}
 	}
 
-	private InternetAddress convertToInternetAddress(Object address) throws AddressException, UnsupportedEncodingException {
+	private InternetAddress[] convertToInternetAddress(Object address) throws AddressException, UnsupportedEncodingException {
+		if (address == null) return new InternetAddress[]{};
 		if (address instanceof InternetAddress)
-			return (InternetAddress)address;
+			return new InternetAddress[] {(InternetAddress)address};
 		else if (address instanceof String) {
-			return new InternetAddress(MimeUtility.encodeText((String)address, configurator.getEncoding(), "Q"));
+			return new InternetAddress[] {new InternetAddress(MimeUtility.encodeText((String)address, configurator.getEncoding(), "Q"))};
+		} else if (address instanceof InternetAddress[]) {
+			return (InternetAddress[]) address;
+		} else if (address instanceof List<?>) {
+			return convertToInternetAddress(((List) address).toArray());
+		} else if (address instanceof Object[]) {
+			List<InternetAddress> list = new ArrayList<InternetAddress>();
+			for (Object o : (Object[])address) {
+				for (InternetAddress addr : convertToInternetAddress(o)) {
+					list.add(addr);
+				}
+				return list.toArray(new InternetAddress[list.size()]);
+			}
 		}
-		return new InternetAddress(MimeUtility.encodeText(address.toString(), configurator.getEncoding(), "Q"));
+		return new InternetAddress[] {new InternetAddress(MimeUtility.encodeText(address.toString(), configurator.getEncoding(), "Q"))};
 
 	}
 	
@@ -232,12 +243,12 @@ public class EmailServiceImpl implements EmailService {
 
 		
 		if (replyTo != null) {
-			mimeMessage.setReplyTo(new InternetAddress[] { convertToInternetAddress(replyTo) });
+			mimeMessage.setReplyTo(convertToInternetAddress(replyTo));
 		} else {
 			if (node != null && node.hasProperty("replyTo")) {
-				mimeMessage.setReplyTo(new InternetAddress[] { convertToInternetAddress(node.getProperty("replyTo").getString()) });
+				mimeMessage.setReplyTo(convertToInternetAddress(node.getProperty("replyTo").getString()));
 			} else if (variables != null && variables.containsKey("replyTo")) {
-				mimeMessage.setReplyTo(new InternetAddress[] { convertToInternetAddress((String)variables.get("replyTo")) });
+				mimeMessage.setReplyTo(convertToInternetAddress(variables.get("replyTo")));
 			}
 		}
 		if (date == null) {
@@ -263,78 +274,64 @@ public class EmailServiceImpl implements EmailService {
 		}
 
 		if (from != null) {
-			mimeMessage.setFrom(convertToInternetAddress(from));
+			mimeMessage.setFrom(convertToInternetAddress(from)[0]);
 		} else {
 			if (node != null && node.hasProperty("from")) {
-				mimeMessage.setFrom(convertToInternetAddress(node.getProperty("from").getString()));
+				mimeMessage.setFrom(convertToInternetAddress(node.getProperty("from").getString())[0]);
 			} else if (variables != null && variables.containsKey("from")) {
-				mimeMessage.setFrom(convertToInternetAddress((String)variables.get("from")));
+				mimeMessage.setFrom(convertToInternetAddress(variables.get("from"))[0]);
 			}
 		}
 
 		if (to != null) {
-			for (int i = 0; i < to.length; i++) {
-				mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(to[i]));
-			}
+			mimeMessage.addRecipients(Message.RecipientType.TO, convertToInternetAddress(to));
 		} else {
 			if (node != null && node.hasProperty("to")) {
 				if (node.getProperty("to").isMultiple()) {
 					Value[] values = node.getProperty("to").getValues();
 					for (int i = 0; i < values.length; i++) {
-						mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(values[i].getString()));
+						mimeMessage.addRecipients(Message.RecipientType.TO, convertToInternetAddress(values[i].getString()));
 					}
 				} else {
-					mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(node.getProperty("to").getString()));
+					mimeMessage.addRecipients(Message.RecipientType.TO, convertToInternetAddress(node.getProperty("to").getString()));
 				}
-			}  else if (variables != null && variables.containsKey("to") && (variables.get("to") instanceof Object[])) {
-				Object[] values = (Object[])variables.get("to");
-				for (int i = 0; i < values.length; i++) {
-					mimeMessage.addRecipient(Message.RecipientType.TO, convertToInternetAddress(values[i]));
-				}
+			}	else if (variables != null && variables.containsKey("to")) {
+				mimeMessage.addRecipients(Message.RecipientType.TO, convertToInternetAddress(variables.get("to")));
 			}
+
 		}
 
 		if (cc != null) {
-			for (int i = 0; i < cc.length; i++) {
-				mimeMessage.addRecipient(Message.RecipientType.CC, convertToInternetAddress(cc[i]));
-			}
+			mimeMessage.addRecipients(Message.RecipientType.CC, convertToInternetAddress(cc));
 		} else {
 			if (node != null && node.hasProperty("cc")) {
 				if (node.getProperty("cc").isMultiple()) {
 					Value[] values = node.getProperty("cc").getValues();
 					for (int i = 0; i < values.length; i++) {
-						mimeMessage.addRecipient(Message.RecipientType.CC, new InternetAddress(values[i].getString()));
+						mimeMessage.addRecipients(Message.RecipientType.CC, convertToInternetAddress(values[i].getString()));
 					}
 				} else {
-					mimeMessage.addRecipient(Message.RecipientType.CC, convertToInternetAddress(node.getProperty("cc").getString()));
+					mimeMessage.addRecipients(Message.RecipientType.CC, convertToInternetAddress(node.getProperty("cc").getString()));
 				}
-			}  else if (variables != null && variables.containsKey("cc") && (variables.get("cc") instanceof Object[])) {
-				Object[] values = (Object[])variables.get("cc");
-				for (int i = 0; i < values.length; i++) {
-					mimeMessage.addRecipient(Message.RecipientType.CC, convertToInternetAddress(values[i]));
-				}
+			} else if (variables != null && variables.containsKey("cc")) {
+				mimeMessage.addRecipients(Message.RecipientType.CC, convertToInternetAddress(variables.get("cc")));
 			}
 		}
 
 		if (bcc != null) {
-			for (int i = 0; i < bcc.length; i++) {
-				mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(bcc[i]));
-			}
+			mimeMessage.addRecipients(Message.RecipientType.BCC, convertToInternetAddress(bcc));
 		} else {
 			if (node != null && node.hasProperty("bcc")) {
 				if (node.getProperty("bcc").isMultiple()) {
 					Value[] values = node.getProperty("bcc").getValues();
 					for (int i = 0; i < values.length; i++) {
-						mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(values[i].getString()));
+						mimeMessage.addRecipients(Message.RecipientType.BCC, convertToInternetAddress(values[i].getString()));
 					}
 				} else {
-					mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(node.getProperty("bcc").getString()));
+					mimeMessage.addRecipients(Message.RecipientType.BCC, convertToInternetAddress(node.getProperty("bcc").getString()));
 				}
-			}  else if (variables != null && variables.containsKey("bcc") && (variables.get("bcc") instanceof Object[])) {
-				Object[] values = (Object[])variables.get("bcc");
-				for (int i = 0; i < values.length; i++) {
-					mimeMessage.addRecipient(Message.RecipientType.BCC, convertToInternetAddress(values[i]));
-				}
+			}  else if (variables != null && variables.containsKey("bcc")) {
+				mimeMessage.addRecipients(Message.RecipientType.BCC, convertToInternetAddress(variables.get("bcc")));
 			}
 		}
 		return mimeMessage;
@@ -343,6 +340,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public String extractTextFromHtml(String html) throws Exception {
 		return ArticleExtractor.getInstance().getText(html);
 	}
@@ -350,6 +348,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmail(MimeMessage message) throws Exception {
 		sendEmail(null, message);
 	}
@@ -357,6 +356,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmail(Session session, final MimeMessage message) throws Exception {
 		boolean haveSession = false;
 
@@ -374,6 +374,7 @@ public class EmailServiceImpl implements EmailService {
 			PipedInputStream in = new PipedInputStream();
 			final PipedOutputStream out = new PipedOutputStream(in);
 			new Thread(new Runnable() {
+				@Override
 				public void run() {
 					try {
 						message.writeTo(out);
@@ -415,6 +416,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmail(String content, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateString(null, content, (Node)null, null, null, null, null, to, cc, bcc, null);
 	}
@@ -422,6 +424,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmail(Session session, String content, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateString(session, content, (Node)null, null, null, null, null, to, cc, bcc, null);
 	}
@@ -429,6 +432,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822String(String content) throws Exception {
 		sendEmailFromRFC822TemplateString(null, null, (Node) null, (HashMap<String, Object>) null);
 	}
@@ -436,6 +440,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822String(Session session, String content) throws Exception {
 		sendEmailFromRFC822TemplateString(session, null, (Node) null, (HashMap<String, Object>) null);
 	}
@@ -443,6 +448,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(String template, Node resource) throws Exception {
 		sendEmailFromRFC822TemplateString(null, template, resource, (HashMap<String, Object>) null);
 	}
@@ -450,6 +456,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(String template, String resource) throws Exception {
 		Session session = null;
 		try {
@@ -469,6 +476,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(String template, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateString(null, template, (Node) null, (HashMap<String, Object>) null);
 	}
@@ -476,6 +484,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(String template, Node resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateString(null, template, resource, (HashMap<String, Object>) null);
 	}
@@ -483,6 +492,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(String template, String resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateString(null, template, resource, (HashMap<String, Object>) null);
 	}
@@ -490,6 +500,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(Session session, String template, Node resource) throws Exception {
 		sendEmailFromRFC822TemplateString(session, template, resource, (HashMap<String, Object>) null);
 	}
@@ -497,6 +508,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(Session session, String template, String resource) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -522,6 +534,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(Session session, String template, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateString(session, template, (Node) null, variables);
 	}
@@ -529,6 +542,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(Session session, String template, Node resource, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -566,6 +580,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateString(Session session, String template, String resource, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -591,6 +606,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(String template, String resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -598,6 +614,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Node template, String resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -605,6 +622,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(String template, Node resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -612,6 +630,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Node template, Node resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -619,6 +638,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Node template, String resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -626,6 +646,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Node template, Node resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -633,6 +654,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(String template, String resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -640,6 +662,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(String template, Node resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateNode(null, template, resource, null);
 	}
@@ -647,6 +670,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, String template, String resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(session, template, resource, null);
 	}
@@ -654,6 +678,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, Node template, String resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(session, template, resource, null);
 	}
@@ -661,6 +686,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, String template, Node resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(session, template, resource, null);
 	}
@@ -668,6 +694,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, Node template, Node resource) throws Exception {
 		sendEmailFromRFC822TemplateNode(session, template, resource, null);
 	}
@@ -675,6 +702,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, Node template, String resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateString(session, getNodeContentAsString(template), resource, variables);
 	}
@@ -682,6 +710,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, Node template, Node resource, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromRFC822TemplateString(session, getNodeContentAsString(template), resource, variables);
 	}
@@ -689,6 +718,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, String template, String resource, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -715,6 +745,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromRFC822TemplateNode(Session session, String template, Node resource, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -740,6 +771,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -747,6 +779,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -754,6 +787,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -761,6 +795,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(Session session, String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -768,6 +803,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(Session session, String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -775,6 +811,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(Session session, String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, null, null, null, null, to, cc, bcc, null);
 	}
@@ -782,6 +819,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -789,6 +827,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -796,6 +835,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Node template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -803,6 +843,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Node template, String resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, variables);
 	}
@@ -810,6 +851,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Node template, Node resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, null, null, null, null, to, cc, bcc, variables);
 	}
@@ -817,6 +859,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, null, null, null, null, to, cc, bcc, variables);
 	}
@@ -824,6 +867,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Node template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, (Node)null, null, null, null, null, to, cc, bcc, variables);
 	}
@@ -831,6 +875,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, String template, String resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -838,6 +883,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, String template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -845,6 +891,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, Object[] to, Object[] cc, Object[] bcc) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, null);
 	}
@@ -852,6 +899,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, Node template, String resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(session, template, resource, null, null, null, null, to, cc, bcc, variables);
 	}
@@ -859,6 +907,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(session, getNodeContentAsString(template), (Node)null, null, null, null, null, to, cc, bcc, variables);
 	}
@@ -866,6 +915,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, String template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -891,6 +941,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, Node template, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(session, getNodeContentAsString(template), (Node)null, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -898,6 +949,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -923,6 +975,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, Node template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -948,6 +1001,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -973,6 +1027,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Session session, Node template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(session, getNodeContentAsString(template), resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -980,6 +1035,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		Session session = null;
 		try {
@@ -1001,6 +1057,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Node template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -1008,6 +1065,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateNode(null, template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -1015,6 +1073,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateNode(Node template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(getNodeContentAsString(template), resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -1022,6 +1081,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -1029,6 +1089,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		sendEmailFromTemplateString(template, resource, subject, replyTo, from, date, to, cc, bcc, variables);
 	}
@@ -1036,6 +1097,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(Session session, String template, String resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 		try {
@@ -1061,6 +1123,7 @@ public class EmailServiceImpl implements EmailService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void sendEmailFromTemplateString(Session session, String template, Node resource, String subject, Object replyTo, Object from, Date date, Object[] to, Object[] cc, Object[] bcc, HashMap<String, Object> variables) throws Exception {
 		boolean haveSession = false;
 
@@ -1071,6 +1134,9 @@ public class EmailServiceImpl implements EmailService {
 				session = repository.loginAdministrative(null);
 			}
 
+			if (template == null) {
+				throw new RepositoryException("Template is null");
+			}
 			String html = templateNode(Md5Encrypter.encrypt(template), resource, template, variables);
 			if (html == null)
 				throw new RepositoryException("Template is empty");
@@ -1124,13 +1190,11 @@ public class EmailServiceImpl implements EmailService {
 						String fileName = n.getName();
 						
 						DataSource source = new StreamDataSource(fileData, fileName, mimeType);
-					    attachmentBodyPart.setDataHandler(
-					      new DataHandler(source));
-					    attachmentBodyPart.setFileName(fileName);
-					    attachmentBodyPart.setDisposition(MimeBodyPart.ATTACHMENT);
-					    attachmentBodyPart.setContentID(fileName);
-					    rootMixedMultipart.addBodyPart(attachmentBodyPart);
-					    
+						attachmentBodyPart.setDataHandler(new DataHandler(source));
+						attachmentBodyPart.setFileName(fileName);
+						attachmentBodyPart.setDisposition(MimeBodyPart.ATTACHMENT);
+						attachmentBodyPart.setContentID(fileName);
+						rootMixedMultipart.addBodyPart(attachmentBodyPart);
 					}
 				}
 			}
