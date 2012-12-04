@@ -38,6 +38,8 @@ import org.apache.felix.scr.annotations.ConfigurationPolicy;
 import org.apache.felix.scr.annotations.Properties;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.ReferencePolicy;
 import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.commons.osgi.OsgiUtil;
 import org.apache.sling.commons.osgi.PropertiesUtil;
@@ -92,11 +94,11 @@ public class EmailResourceChangeListener {
     public static final String EMAIL_SEND_TOPIC = "org/liveSense/email/send";
     public static final String EMAIL_REMOVE_TOPIC = "org/liveSense/email/remove";
  
-    @Reference
+	@Reference(cardinality=ReferenceCardinality.MANDATORY_UNARY, policy=ReferencePolicy.DYNAMIC)
     private SlingRepository repository;
-    @Reference
+	@Reference(cardinality=ReferenceCardinality.MANDATORY_UNARY, policy=ReferencePolicy.DYNAMIC)
     private EventAdmin eventAdmin;
-    @Reference
+	@Reference(cardinality=ReferenceCardinality.MANDATORY_UNARY, policy=ReferencePolicy.DYNAMIC)
     ResourceResolverFactory resourceResolverFactory;
 
     private ArrayList<PathEventListener> eventListeners = new ArrayList<PathEventListener>();

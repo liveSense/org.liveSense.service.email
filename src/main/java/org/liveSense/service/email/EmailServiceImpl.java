@@ -58,6 +58,8 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Properties;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.ReferencePolicy;
 import org.apache.felix.scr.annotations.Service;
 import org.apache.jackrabbit.value.BinaryValue;
 import org.apache.sling.api.resource.LoginException;
@@ -109,13 +111,13 @@ public class EmailServiceImpl implements EmailService {
 	private String propertyName = DEFAULT_PROPERTY_NAME;
 	private String spoolFolder = DEFAULT_SPOOL_FOLDER;
 
-	@Reference
+	@Reference(cardinality=ReferenceCardinality.MANDATORY_UNARY, policy=ReferencePolicy.DYNAMIC)
 	private Configurator configurator;
 
-	@Reference
+	@Reference(cardinality=ReferenceCardinality.MANDATORY_UNARY, policy=ReferencePolicy.DYNAMIC)
 	private SlingRepository repository;
 
-	@Reference
+	@Reference(cardinality=ReferenceCardinality.MANDATORY_UNARY, policy=ReferencePolicy.DYNAMIC)
 	ResourceResolverFactory resourceResolverFactory;
 
 	protected SlingRepository getRepository() {
