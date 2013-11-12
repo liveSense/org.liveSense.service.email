@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?><features name="liveSense-${liveSense.version}-service-email" xmlns="http://karaf.apache.org/xmlns/features/v1.0.0">
+	<feature name="liveSense-service-email" version="${liveSense.service.email.version}" description="liveSense service email">
+        <feature>liveSense-core-base</feature>
+        <feature>liveSense-core-sling-extension-event</feature>
+        <bundle dependency="true">mvn:org.apache.servicemix.bundles/org.apache.servicemix.bundles.freemarker/2.3.18_1</bundle>
+        <bundle>mvn:com.github.livesense/org.liveSense.service.email/${liveSense.service.email.version}</bundle>
+	</feature>
+</features>
