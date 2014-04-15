@@ -23,7 +23,7 @@
   <parent>
       <groupId>com.github.livesense</groupId>
       <artifactId>org.liveSense.parent</artifactId>
-      <version>2-SNAPSHOT</version>
+      <version>1.0.3-SNAPSHOT</version>
 		<relativePath>..</relativePath>
   </parent>
 	<scm>
@@ -34,7 +34,6 @@
 
 	<artifactId>org.liveSense.service.email</artifactId>
 	<packaging>bundle</packaging>
-	<version>1.0.1-SNAPSHOT</version>
 	<name>liveSense :: Service :: Email compositing and sending</name>
 	<description>liveSense Email service. It's storing the mails in /var/spool and a Job sends it periodically</description>
 	<repositories>
